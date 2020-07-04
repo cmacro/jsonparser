@@ -21,7 +21,6 @@ type
   private
     procedure WriteArray(level: integer; const s: string; Idx, len: Integer);
     procedure WriteJsonObj(level: integer; const s: string; Idx, len: Integer);
-    procedure ReadData(var parser: TJSONParser);
   public
   published
     procedure TestDefault;
@@ -39,25 +38,13 @@ uses
     SetLength(Result, l);
     for I := 1 to l do
       Result[i] := ' ';
-
-
   end;
-
-procedure TestTJsonReader.ReadData(var parser: TJSONParser);
-var
-  bIsID: Boolean;
-  cTok: Char;
-  k: TJSONParserKind;
-begin
-
-
-end;
 
 procedure TestTJsonReader.WriteArray(level: integer; const s: string; Idx, len: Integer);
 var
-  cTok: Char;
-  k: TJSONParserKind;
-  parser: TJSONParser;
+  c: Char;
+  k: TJSONReaderKind;
+  parser: TJSONReader;
 begin
 //  Writeln(GetIndent(level) + 'read array');
 //  Writeln(GetIndent(level) + '--------------------------');
@@ -68,20 +55,20 @@ begin
 
   while true do
   begin
-    k := parser.GetNextJSON;
-    if k = kNone then Break;
+    k := parser.GetNext;
+    if k = jrkNone then Break;
 
-//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONParserKind), ord(k)));
+//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
 //    if not (k in [kArray, kObject, kTrue, kFalse, kNull]) then
 //      Writeln('  token: ' + parser.GetToken);
 
-    if k = karray then
+    if k = jrkArray then
       WriteArray(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = kObject then
+    else if k = jrkObject then
       WriteJsonObj(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen);
 
-    cTok := parser.GetNextNonWhiteChar;
-    Check((cTok = ',') or (ctok = #0) or (ctok = ']'));
+    c := parser.GetNextNonWhiteChar;
+    Check((c = ',') or (c = #0) or (c = ']'));
   end;
 
 end;
@@ -90,8 +77,8 @@ procedure TestTJsonReader.WriteJsonObj(level: integer; const s: string; Idx, len
 var
   bIsID: Boolean;
   cTok: Char;
-  k: TJSONParserKind;
-  parser: TJSONParser;
+  k: TJSONReaderKind;
+  parser: TJSONReader;
 begin
 //  Writeln(GetIndent(level) + 'read object');
 //  Writeln(GetIndent(level) + '--------------------------');
@@ -102,16 +89,16 @@ begin
   bIsID := True;
   while true do
   begin
-    k := parser.GetNextJSON;
-    if k = kNone then Break;
+    k := parser.GetNext;
+    if k = jrkNone then Break;
 
-//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONParserKind), ord(k)));
+//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
 //    if not (k in [kArray, kObject, kTrue, kFalse, kNull]) then
 //      Writeln('  token: ' + parser.GetToken);
 
-    if k = karray then
+    if k = jrkArray then
       WriteArray(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = kObject then
+    else if k = jrkObject then
       WriteJsonObj(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen);
 
     if bIsID  then
@@ -133,16 +120,12 @@ var
   bIsID: Boolean;
   cstr: TStringStream;
   cTok: Char;
-  iTickCount: Integer;
-  k: TJSONParserKind;
-  parser: TJSONParser;
+  iTickCount: Cardinal;
+  k: TJSONReaderKind;
+  parser: TJSONReader;
   s: string;
-  sKey: string;
   I: Integer;
   iSize: Integer;
-
-
-
 begin
   parser.Init('{}', 1, -1);
   Check(not parser.GetNextString, 'ø’Json∂¡»°¥ÌŒÛ');
@@ -165,17 +148,17 @@ begin
   bIsID := True;
   while true do
   begin
-    k := parser.GetNextJSON;
-    if k = kNone then Break;
+    k := parser.GetNext;
+    if k = jrkNone then Break;
 
 
-    Write('Type: ' + GetEnumName(TypeInfo(TJSONParserKind), ord(k)));
-    if not (k in [kArray, kObject, kTrue, kFalse, kNull]) then
+    Write('Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
+    if not (k in [jrkArray, jrkObject, jrkTrue, jrkFalse, jrkNull]) then
       Writeln('  token: ' + parser.GetToken);
 
-    if k = karray then
+    if k = jrkArray then
       WriteArray(1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = kObject then
+    else if k = jrkObject then
       WriteJsonObj(1, parser.JSON, parser.TokenIdx, parser.TokenLen);
 
     if bIsID  then
