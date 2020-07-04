@@ -16,8 +16,8 @@ type
 
   TJSONReader = record
     JSON: string;
-    Index: integer;
-    Len: integer;
+    CurIdx: integer;
+    LastIdx: integer;
     TokenIdx: Integer;
     TokenLen : integer;
     procedure Init(const aJSON: string; aIndex, aLen: integer);
@@ -48,18 +48,18 @@ procedure TJSONReader.Init(const aJSON: string; aIndex, aLen: integer);
 begin
   JSON := aJSON;
   if aLen > 0 then
-    Len := aLen + aIndex
+    LastIdx := aLen + aIndex
   else
-    Len := length(JSON);
-  Index := aIndex;
+    LastIdx := length(JSON);
+  CurIdx := aIndex;
 end;
 
 function TJSONReader.GetNextChar: char;
 begin
-  if Index<=Len then
+  if CurIdx<=LastIdx then
   begin
-    result := JSON[Index];
-    inc(Index);
+    result := JSON[CurIdx];
+    inc(CurIdx);
   end
   else
     result := #0;
@@ -67,32 +67,43 @@ end;
 
 function TJSONReader.GetNextNonWhiteChar: char;
 begin
-  if Index<=Len then
+//  while (CurIdx <= LastIdx) and (JSON[CurIdx] <= ' ') do
+//    inc(CurIdx);
+//
+//  if (CurIdx <= LastIdx) and (JSON[CurIdx] >= ' ') then
+//  begin
+//    Result := JSON[CurIdx];
+//    inc(CurIdx);
+//  end
+//  else
+//    result := #0;
+
+  if CurIdx<=LastIdx then
     repeat
-      if JSON[Index]>' ' then
+      if JSON[CurIdx]>' ' then
       begin
-        result := JSON[Index];
-        inc(Index);
+        result := JSON[CurIdx];
+        inc(CurIdx);
         exit;
       end;
-      inc(Index);
-    until Index>Len;
+      inc(CurIdx);
+    until CurIdx>LastIdx;
   result := #0;
 end;
 
 function TJSONReader.CheckNextNonWhiteChar(aChar: char): boolean;
 begin
-  if Index<=Len then
+  if CurIdx<=LastIdx then
     repeat
-      if JSON[Index]>' ' then
+      if JSON[CurIdx]>' ' then
       begin
-        result := JSON[Index] = aChar;
+        result := JSON[CurIdx] = aChar;
         if result then
-          inc(Index);
+          inc(CurIdx);
         exit;
       end;
-      inc(Index);
-    until Index>Len;
+      inc(CurIdx);
+    until CurIdx>LastIdx;
   result := false;
 end;
 
@@ -116,10 +127,10 @@ begin
       'f': AppendChar(str,#$0c);
       'r': AppendChar(str,#$0d);
       'u': begin
-        u := Copy(JSON,Index,4);
+        u := Copy(JSON,CurIdx,4);
         if length(u)<>4 then
           exit;
-        inc(Index,4);
+        inc(CurIdx,4);
         val('$'+u,unicode,err);
         if err<>0 then
           exit;
@@ -142,21 +153,21 @@ function TJSONReader.GetNextString: boolean;
 var i: integer;
 begin
   result := false;
-  for i := Index to Len do
+  for i := CurIdx to LastIdx do
     case JSON[i] of
     '"': begin // end of string without escape -> direct copy
-      //str := copy(JSON,Index,i-Index);
-      TokenIdx := Index; TokenLen := i- Index;
-      Index := i+1;
+      //str := copy(JSON,CurIdx,i-CurIdx);
+      TokenIdx := CurIdx; TokenLen := i- CurIdx;
+      CurIdx := i+1;
       result := true;
       break;
     end;
     '\':
       begin // need unescaping
         raise Exception.Create('The format is currently not supported');
-        //str := copy(JSON,Index,i-Index);
-        TokenIdx := Index; TokenLen := i- Index;
-        Index := i;
+        //str := copy(JSON,CurIdx,i-CurIdx);
+        TokenIdx := CurIdx; TokenLen := i- CurIdx;
+        CurIdx := i;
         //AppendNextStringUnEscape(str);
         result := true;
         break;
@@ -175,16 +186,16 @@ function TJSONReader.GetNext: TJSONReaderKind;
 begin
   result := jrkNone;
   case GetNextNonWhiteChar of
-  'n': begin //if copy(JSON,Index,3)='ull' then begin
-         inc(Index,3);
+  'n': begin //if copy(JSON,CurIdx,3)='ull' then begin
+         inc(CurIdx,3);
          result := jrkNull;
        end;
-  'f': begin //if copy(JSON,Index,4)='alse' then begin
-         inc(Index,4);
+  'f': begin //if copy(JSON,CurIdx,4)='alse' then begin
+         inc(CurIdx,4);
          result := jrkFalse;
        end;
-  't': begin //if copy(JSON,Index,3)='rue' then begin
-         inc(Index,3);
+  't': begin //if copy(JSON,CurIdx,3)='rue' then begin
+         inc(CurIdx,3);
          result := jrkTrue;
        end;
   '"': if GetNextString then begin
@@ -195,13 +206,13 @@ begin
   '[': if ReadJSONArray then
          result := jrkArray;
   '-','0'..'9': begin
-    TokenIdx := Index-1;
+    TokenIdx := CurIdx-1;
     while true do
-      case JSON[Index] of
-      '-','+','0'..'9','.','E','e': inc(Index);
+      case JSON[CurIdx] of
+      '-','+','0'..'9','.','E','e': inc(CurIdx);
       else break;
       end;
-    TokenLen := Index-TokenIdx;
+    TokenLen := CurIdx-TokenIdx;
     Result := kNumber;
   end;
   end;
@@ -211,52 +222,52 @@ function TJSONReader.ReadJSONArray: boolean;
 var
   level: Integer;
 begin
-  TokenIdx := Index - 1;
+  TokenIdx := CurIdx - 1;
   level := 0;
   result := false;
-  if Index <= Len then
+  if CurIdx <= LastIdx then
     repeat
-      case JSON[Index] of
+      case JSON[CurIdx] of
         '[': inc(level);
         ']': begin
           if level = 0 then
           begin
-            inc(Index);
-            TokenLen := Index - TokenIdx;
+            inc(CurIdx);
+            TokenLen := CurIdx - TokenIdx;
             Result := True;
             Break;
           end;
           dec(level);
         end;
       end;
-      inc(Index);
-    until Index>Len;
+      inc(CurIdx);
+    until CurIdx>LastIdx;
 end;
 
 function TJSONReader.ReadJSONObject: boolean;
 var
   level: Integer;
 begin
-  TokenIdx := Index - 1;
+  TokenIdx := CurIdx - 1;
   level := 0;
   result := false;
-  if Index <= Len then
+  if CurIdx <= LastIdx then
     repeat
-      case JSON[Index] of
+      case JSON[CurIdx] of
         '{': inc(level);
         '}': begin
           if level = 0 then
           begin
-            inc(Index);
-            TokenLen := Index - TokenIdx;
+            inc(CurIdx);
+            TokenLen := CurIdx - TokenIdx;
             Result := True;
             Break;
           end;
           dec(level);
         end;
       end;
-      inc(Index);
-    until Index>Len;
+      inc(CurIdx);
+    until CurIdx>LastIdx;
 end;
 
 end.
