@@ -9,7 +9,7 @@ json reader
 
 ## code
 
-```
+```pascal
 var
   parser: TJSONReader;
 begin  
