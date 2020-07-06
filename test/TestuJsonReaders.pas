@@ -148,6 +148,7 @@ begin
   Check(parser.GetNextNonWhiteChar = ':');
   check(parser.GetNext = jrkString);
   Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');
+  Check(parser.AsStr = '中文测试');
 
   //Writeln(UTF8ToString(parser.JSONStrToStr));
 
