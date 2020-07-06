@@ -1,4 +1,4 @@
-unit TestuJsonReaders;
+ï»¿unit TestuJsonReaders;
 {
 
   Delphi DUnit Test Case
@@ -12,7 +12,7 @@ unit TestuJsonReaders;
 interface
 
 uses
-  TestFramework, Classes, SysUtils, uJsonReaders, Windows;
+  TestFramework, Classes, SysUtils, uJsonReaders, Windows, JsonDataObjects;
 
 type
   // Test methods for class TTestdata
@@ -21,15 +21,24 @@ type
   private
     procedure WriteArray(level: integer; const s: string; Idx, len: Integer);
     procedure WriteJsonObj(level: integer; const s: string; Idx, len: Integer);
+    function CheckObjectJson(const s: string; idx, len: LongInt;
+      var msg: string): boolean;
+    function CheckArrayJson(const s: string; idx, len: LongInt; var msg: string): boolean;
+    function CheckNodeItem(k: TJSONReaderKind; iIdx: Integer; const sfieldName: string;
+      var r: TJSONReader; cJsonObj: TJsonObject; var msg: string): boolean;
+    function kToBool(k: TJSONReaderKind): boolean;
+    function CheckCompareData(const data: string; var msg: string): Boolean;
   public
+    function CheckCompareFile(const fn: string; var msg: string): Boolean;
   published
     procedure TestDefault;
+    procedure TestReader;
   end;
 
 implementation
 
 uses
-  JsonDataObjects, TypInfo;
+  TypInfo;
 
   function GetIndent(l: integer): string;
   var I: Integer;
@@ -128,7 +137,18 @@ var
   iSize: Integer;
 begin
   parser.Init('{}', 1, -1);
-  Check(not parser.GetNextString, '¿ÕJson¶ÁÈ¡´íÎó');
+  Check(not parser.GetNextString, 'ï¿½ï¿½Jsonï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½');
+
+  parser.Init('{"hex": "\u4e2d\u6587\u6d4b\u8bd5"}', 1, -1);
+  parser.GetDataType;
+  parser.GetNext;
+  Check(parser.GetToken = 'hex');
+  Check(parser.GetNextNonWhiteChar = ':');
+  check(parser.GetNext = jrkString);
+  Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');
+
+  //Writeln(UTF8ToString(parser.JSONStrToStr));
+
 
   Writeln('');
   parser.Init('{"abc": "abc"}', 1, -1);
@@ -144,6 +164,7 @@ begin
   Writeln('Parser Json Obj: ' + s);
   parser.Init(s, 1, -1);
   check(parser.GetNextNonWhiteChar = '{');
+
 
   bIsID := True;
   while true do
@@ -174,6 +195,7 @@ begin
     end;
   end;
 
+  Exit;
   Writeln('read big file ...');
   cstr := TStringStream.Create.Create('', TEncoding.UTF8);
   cstr.LoadFromFile('.\data\bpProducts.json');
@@ -186,6 +208,597 @@ begin
     WriteJsonObj(1, s, 1, -1);
   iTickCount := GetTickCount - iTickCount;
   Writeln(format('TickCount read %d size: %d count: %d/%d', [3, iSize, iTickCount div 3, iTickCount]));
+
+end;
+
+
+function JsonToStr(const src: string): string;
+begin
+  
+end;
+
+procedure ReadFileData(const fn: string; var data: string);
+var
+  cFile: TStringStream;
+begin
+  cFile := TStringStream.Create('', TEncoding.UTF8);
+  try
+    cFile.LoadFromFile(fn);
+    data := cFile.DataString;
+  finally
+    cFile.Free;
+  end;
+end;
+
+function TestTJsonReader.kToBool(k: TJSONReaderKind): boolean;
+begin
+  if k = jrkFalse then result := False
+  else result := True;
+end;
+
+function TestTJsonReader.CheckNodeItem(k: TJSONReaderKind; iIdx: Integer;
+    const sfieldName: string; var r: TJSONReader; cJsonObj: TJsonObject;
+    var msg: string): boolean;
+
+  procedure SetMsg(const s: string);
+  var
+    d: string;
+  begin
+    if iidx < r.CurIdx then
+      d := Copy(r.JSON, iIdx, r.CurIdx - iIdx)
+    else  d := '';
+    msg := format('Index: %d -> %d %s %s', [iIdx, r.CurIdx, s, d]);
+  end;
+var
+  bSucc: Boolean;
+  jt: TJsonDataType;
+begin
+  Result := False;
+  jt := cJsonObj.Types[sFieldName];
+  case k of
+    jrkNone: begin  SetMsg('field not value'); Exit; end;
+    jrkNull: begin
+              if (jt = jdtObject) and (cJsonObj.O[sFieldName] = nil ) then
+              begin
+                Result := true;
+                Exit;
+              end;
+
+              if cJsonObj.Types[sFieldName] <> jdtNone then
+              begin
+                SetMsg('Field types None are inconsistent'); Exit;
+              end;
+
+             end;
+    jrkFalse,
+    jrkTrue :begin
+              if cJsonObj.Types[sFieldName] <> jdtBool then
+              begin
+                SetMsg('Field types boolean are inconsistent'); Exit;
+              end;
+              if cJsonObj.B[sFieldName] <> kToBool(k) then
+              begin
+                SetMsg('Field value are inconsistent'); Exit;
+              end;
+             end ;
+    jrkString: begin
+              if cJsonObj.Types[sFieldName] <> jdtString then
+              begin
+                SetMsg('Field types string are inconsistent'); Exit;
+              end;
+              if not SameText(r.GetToStrToken, cJsonObj.S[sFieldName]) then
+              begin
+                SetMsg('Field value '+ cJsonObj.S[sFieldName] +' are inconsistent'); Exit;
+              end;
+             end;
+    jrkNumber:  begin
+              if not (cJsonObj.Types[sFieldName] in [jdtInt, jdtLong, jdtULong, jdtFloat]) then
+              begin
+                SetMsg('Field types kNumber are inconsistent'); Exit;
+              end;
+
+              if not SameText(r.GetToken, cJsonObj.S[sFieldName]) then
+              begin
+                bSucc := False;
+                case jt of
+                  jdtInt    : bSucc := r.AsInt = cJsonObj.I[sfieldName];
+                  jdtLong   : bSucc := r.AsInt64 = cJsonObj.L[sfieldName];
+                  jdtULong  : bSucc := r.AsUInt64 = cJsonObj.U[sfieldName];
+                  jdtFloat  : bSucc := SameStr(FloatToStr(r.AsFloat), cJsonObj.S[sfieldName]);
+                end;
+                if not bSucc then
+                begin
+                  SetMsg('Field value '+ cJsonObj.S[sFieldName] +' are inconsistent'); Exit;
+                end;
+              end;
+             end;
+    jrkObject: begin
+              if cJsonObj.Types[sFieldName] <> jdtObject then
+              begin
+                SetMsg('Field types string are inconsistent'); Exit;
+              end;
+              if not CheckObjectJson(r.JSON, r.TokenIdx, r.TokenLen, msg) then
+                Exit;
+             end;
+    jrkArray: begin
+              if cJsonObj.Types[sFieldName] <> jdtArray then
+              begin
+                SetMsg('Field types string are inconsistent'); Exit;
+              end;
+              if not CheckArrayJson(r.JSON, r.TokenIdx, r.TokenLen, msg) then
+                Exit;
+             end;
+    else
+    begin
+      SetMsg('unknown type'); Exit;
+    end;
+  end;
+
+  Result := True;
+
+end;
+
+function TestTJsonReader.CheckObjectJson(const s: string; idx, len: LongInt; var msg: string): boolean;
+var
+  bIsField: Boolean;
+  c: Char;
+  cJsonObj: TJsonObject;
+  k: TJSONReaderKind;
+  rReader: TJsonReader;
+  I: Integer;
+  iIdx: Integer;
+  sFieldName: string;
+  sNewData: string;
+
+  procedure SetMsg(const s: string);
+  begin
+    msg := Format(' FieldName: %s Index:  %d -> %d %s', [sFieldName, iIdx, rReader.CurIdx, s]);
+  end;
+
+begin
+  Result := False;
+  if len <= 0 then
+    len := length(s);
+
+  rReader.Init(s, idx, len);
+  k := rReader.GetDataType;
+  if k <> jrkObject then
+    Exit;
+
+  sFieldName := '';
+  cJsonObj := TJsonObject.Create;
+  try
+    sNewData := Copy(s, idx, len);
+    cJsonObj.FromJSON(sNewData);
+
+    bIsField := True;
+    while True do
+    begin
+      iIdx := rReader.CurIdx;
+      k := rReader.GetNext;
+      if (k = jrkNone) and (cJsonObj.Count = 0) then
+        Break;
+
+      if k = jrkNone then
+      begin
+        SetMsg('read object error ' + sNewData);
+        Exit;
+      end;
+
+      if k <> jrkString then
+      begin
+        SetMsg('read field name');
+        Exit;
+      end;
+      if rReader.GetNextNonWhiteChar <> ':' then
+      begin
+        SetMsg('The field is not over');
+        Exit;
+      end;
+
+      sFieldName := rReader.GetToStrToken;
+      iIdx := rReader.CurIdx;
+      k :=  rReader.GetNext;
+      if not CheckNodeItem(k, iIdx, sFieldName, rReader, cJsonObj, msg) then
+        Exit;
+
+      iIdx := rReader.CurIdx;
+      c := rReader.GetNextNonWhiteChar;
+      if not ((c = ',') or (c = #0) or (c = '}')) then
+      begin
+        SetMsg('the value is not over');
+        Exit;
+      end;
+
+      if (c = #0) or (c = '}') then
+      begin
+        Break;
+      end;
+
+    end;
+  finally
+    cJsonObj.Free;
+  end;
+
+  Result := True;
+
+end;
+
+function TestTJsonReader.CheckArrayJson(const s: string; idx, len: LongInt; var msg: string): boolean;
+var
+  bSucc: Boolean;
+  c: Char;
+  iIdx: Integer;
+  k: TJSONReaderKind;
+  r: TJsonReader;
+  cJsonObj: TJsonArray;
+  Current: Integer;
+  jt: TJsonDataType;
+  sNewData: string;
+
+  procedure SetMsg(const s: string);
+  begin
+    msg := format('Index: %d -> %d %s', [iIdx, r.CurIdx, s]);
+  end;
+
+begin
+ Result := False;
+ if len <= 0 then
+  len := length(s);
+  r.Init(s, idx, len);
+  k := r.GetDataType;
+  if k <> jrkArray then
+    Exit;
+
+  cJsonObj := TJsonArray.Create;
+  try
+    sNewData := Copy(s, idx, len);
+    cJsonObj.FromJSON(sNewData);
+
+    Current := -1;
+    while True do
+    begin
+      inc(Current);
+      iIdx := r.CurIdx;
+      k := r.GetNext;
+      jt := jdtNone;
+      if k <> jrkNone then
+        jt := cJsonObj.Types[Current];
+
+      case k of
+        jrkNone: begin
+                  if (cJsonObj.Count = Current) then Break;
+                  SetMsg('field not value'); Exit;
+                end;
+        jrkNull: begin
+                  if ((jt = jdtObject) and (cJsonObj.Items[Current].ObjectValue <> nil)) then
+                  begin
+                    SetMsg('Field types None are inconsistent'); Exit;
+                  end;
+                  if not (jt  in [jdtObject,jdtNone]) then
+                  begin
+                    SetMsg('Field types None are inconsistent'); Exit;
+                  end;
+                 end;
+        jrkFalse,
+        jrkTrue :begin
+                  if jt <> jdtBool then
+                  begin
+                    SetMsg('Field types boolean are inconsistent'); Exit;
+                  end;
+                  if cJsonObj.B[Current] <> kToBool(k) then
+                  begin
+                    SetMsg('Field value are inconsistent'); Exit;
+                  end;
+                 end ;
+        jrkString: begin
+                  if jt <> jdtString then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not SameText(r.GetToStrToken, cJsonObj.S[Current]) then
+                  begin
+                    SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent'); Exit;
+                  end;
+                 end;
+        jrkNumber:  begin
+                  if not (jt in [jdtInt, jdtLong, jdtULong, jdtFloat]) then
+                  begin
+                    SetMsg('Field types kNumber are inconsistent'); Exit;
+                  end;
+                  if not SameText(r.GetToken, cJsonObj.S[Current]) then
+                  begin
+                    bSucc := False;
+                    case jt of
+                      jdtInt    : bSucc := r.AsInt = cJsonObj.I[Current];
+                      jdtLong   : bSucc := r.AsInt64 = cJsonObj.L[Current];
+                      jdtULong  : bSucc := r.AsUInt64 = cJsonObj.U[Current];
+                      jdtFloat  : bSucc := SameStr(FloatToStr(r.AsFloat), cJsonObj.S[Current]);
+                    end;
+                    if not bSucc then
+                    begin
+                      SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent');
+                      Exit;
+                    end;
+                  end;
+                 end;
+        jrkObject: begin
+                  if cJsonObj.Types[Current] <> jdtObject then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not CheckObjectJson(s, r.TokenIdx, r.TokenLen, msg) then
+                  begin
+                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]); // InttoStr() +'  ' + msg;
+                    Exit;
+                  end;
+                 end;
+        jrkArray: begin
+                  if cJsonObj.Types[Current] <> jdtArray then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not CheckArrayJson(s, r.TokenIdx, r.TokenLen, msg) then
+                  begin
+                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]);
+                    Exit;
+                  end;
+                 end;
+        else
+        begin
+          SetMsg('unknown type'); Exit;
+        end;
+      end;
+
+      c := r.GetNextNonWhiteChar;
+      if not ((c = ',') or (c = #0) or (c = ']')) then
+      begin
+        SetMsg('the value is not over');
+        Exit;
+      end;
+
+      if (c = #0) or (c = ']') then
+        Break;
+    end;
+  finally
+    cJsonObj.Free;
+  end;
+
+  Result := True;
+
+end;
+
+function TestTJsonReader.CheckCompareData(const data: string; var msg: string):Boolean;
+var
+  k: TJSONReaderKind;
+  rReader: TJsonReader;
+begin
+  rReader.Init(data, 1, -1);
+  k := rReader.GetDataType;
+  if k = jrkObject then
+    Result := CheckObjectJson(data, 1, -1, msg)
+  else if k = jrkArray then
+    Result := CheckArrayJson(data, 1, -1, msg)
+  else
+  begin
+    msg := 'unknown value';
+    Result := False;
+  end;
+end;
+
+function TestTJsonReader.CheckCompareFile(const fn: string; var msg: string):Boolean;
+var
+  s: string;
+begin
+  ReadFileData(fn, s);
+  Result := CheckCompareData(s, msg);
+end;
+
+procedure TestTJsonReader.TestReader;
+var
+  msg: string;
+begin
+  //Check(JsonToStr('{"foo": "bar"}') = '{"foo": "bar"}', 'test object');
+  //Check(JsonToStr('{"foo": "\\\\"}') = '{"foo": "\\"}', 'test escaped backslash');
+//  Check(JsonToStr('{"foo": "\\\\\\\""}') = '{"foo": ''\\\"'}', 'test escaped chars');
+//  Check(JsonToStr('{"foo": "\\\\\\n"}') = '{"foo": '\\\n'}', 'test escaped \\n');
+//  Check(JsonToStr('{"foo": "bar\\nbar"}') = '{"foo": "bar\nbar"}', 'test string with escaped line break');
+
+  Check(CheckCompareData('{"foo": "bar"}', msg), 'test object ' + msg);
+  Check(CheckCompareData('{"foo": "\\\\"}', msg), 'test escaped backslash ' + msg);
+  Check(CheckCompareData('{"foo": "\\\\\\\""}', msg), 'test escaped chars ' + msg);
+  Check(CheckCompareData('{"foo": "\\\\\\n"}', msg), 'test escaped \\n ' + msg);
+  Check(CheckCompareData('{"foo": "bar\\nbar"}', msg),  'test string with escaped line break ' + msg);
+
+  Writeln(' parser passes json file');
+  Check(CheckCompareFile('.\passes\1.json', msg), 'parser passes 1.json fileï¼š' + msg);
+  Check(CheckCompareFile('.\passes\2.json', msg), 'parser passes 2.json fileï¼š' + msg);
+  Check(CheckCompareFile('.\passes\3.json', msg), 'parser passes 3.json fileï¼š' + msg);
+
+
+
+  
+
+
+
+// exports["test unclosed array"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/2.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test unquotedkey keys must be quoted"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/3.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test extra comma"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/4.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test double extra comma"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/5.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test missing value"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/6.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test comma after the close"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/7.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test extra close"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/8.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test extra comma after value"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/9.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test extra value after close with misplaced quotes"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/10.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test illegal expression addition"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/11.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test illegal invocation of alert"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/12.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test numbers cannot have leading zeroes"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/13.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test numbers cannot be hex"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/14.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test illegal backslash escape \\0"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/15.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test unquoted text"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/16.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test illegal backslash escape \\x"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/17.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test missing colon"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/19.json")
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test double colon"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/20.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test comma instead of colon"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/21.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test colon instead of comma"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/22.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test bad raw value"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/23.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test single quotes"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/24.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test tab character in string"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/25.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test tab character in string 2"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/26.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test line break in string"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/27.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test line break in string in array"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/28.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test 0e"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/29.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test 0e+"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/30.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test 0e+ 1"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/31.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test comma instead of closing brace"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/32.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// };
+
+// exports["test bracket mismatch"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/33.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// }
+
+// exports["test extra brace"] = function () {
+//   var json = fs.readFileSync(__dirname + "/fails/34.json").toString();
+//   assert["throws"](function () {parser.parse(json)}, "should throw error");
+// }
+
+// exports["test pass-1"] = function () {
+//   var json = fs.readFileSync(__dirname + "/passes/1.json").toString();
+//   assert.doesNotThrow(function () {parser.parse(json)}, "should pass");
+// }
+
+// exports["test pass-2"] = function () {
+//   var json = fs.readFileSync(__dirname + "/passes/2.json").toString();
+//   assert.doesNotThrow(function () {parser.parse(json)}, "should pass");
+// }
+
+// exports["test pass-3"] = function () {
+//   var json = fs.readFileSync(__dirname + "/passes/3.json").toString();
+//   assert.doesNotThrow(function () {parser.parse(json)}, "should pass");
+// }
+
+// if (require.main === module)
+//     require("test").run(exports);
+
 
 end;
 
