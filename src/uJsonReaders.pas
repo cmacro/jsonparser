@@ -112,9 +112,8 @@ begin
 end;
 
 procedure TJSONReader.AppendNextStringUnEscape; //(var str: string);
-var c: char;
-    u: string;
-    unicode,err: integer;
+var
+  c: char;
 begin
   repeat
     c := GetNextChar;
@@ -243,7 +242,6 @@ const
   MaxBufPos = 127;
 var
   Buf: array[0..MaxBufPos] of Char;
-  F: PChar;
   BufPos, Len: Integer;
   d: LongWord;
   idx, iEndIdx: Integer;
