@@ -350,7 +350,7 @@ var
 
   procedure SetMsg(const s: string);
   begin
-    msg := Format(' FieldName: %s Index:  %d -> %d %s', [sFieldName, iIdx, rReader.CurIdx, s]);
+    msg := Format(' fieldname: %s Index:  %d -> %d %s', [sFieldName, iIdx, rReader.CurIdx, s]);
   end;
 
 begin
