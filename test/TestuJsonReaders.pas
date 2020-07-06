@@ -140,9 +140,11 @@ begin
   Check(not parser.GetNextString, '��Json��ȡ����');
 
   parser.Init('{"hex": "\u4e2d\u6587\u6d4b\u8bd5"}', 1, -1);
-  parser.GetDataType;
-  parser.GetNext;
+  check(parser.GetDataType = jrkObject, 'Read Json data type, should be Object');
+
+  check(parser.GetNext = jrkString, 'Read attribute name');
   Check(parser.GetToken = 'hex');
+
   Check(parser.GetNextNonWhiteChar = ':');
   check(parser.GetNext = jrkString);
   Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');

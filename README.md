@@ -2,13 +2,37 @@
 
 json reader
 
-½âÎö²¿·Ö´úÂëÊ¹ÓÃ mORMotÖĞµÄJson½âÎö´¦Àí¡£Ö»±£ÁôÁËÊı¾İ¶ÁÈ¡¹ı³Ì´¦Àí£¬²»Éú³ÉVariant¶ÔÏó¡£
+è§£æéƒ¨åˆ†ä»£ç ä½¿ç”¨ mORMotä¸­çš„Jsonè§£æå¤„ç†ã€‚åªä¿ç•™äº†æ•°æ®è¯»å–è¿‡ç¨‹å¤„ç†ï¼Œä¸ç”ŸæˆVariantå¯¹è±¡ã€‚
 
-½â¾ö´óÊı¾İÁ¿£¨ÌØÊâÇé¿öÏÂ£©¶ÁÈ¡Ê±£¬³öÏÖÄÚ´æÎŞ·¨·ÖÅäÎÊÌâ¡£
+è§£å†³å¤§æ•°æ®é‡ï¼ˆç‰¹æ®Šæƒ…å†µä¸‹ï¼‰è¯»å–æ—¶ï¼Œå‡ºç°å†…å­˜æ— æ³•åˆ†é…é—®é¢˜ã€‚
+
+
+## code
+
+```
+var
+  parser: TJSONReader;
+begin  
+  
+  parser.Init('{"hex": "\u4e2d\u6587\u6d4b\u8bd5"}', 1, -1);
+  
+  // è·³è¿‡ç¬¬ä¸€ä¸ª { or [
+  check(parser.GetDataType = jrkObject, 'Read Json data type, should be Object');
+  
+  // è¯»å–Jsonå¯¹è±¡çš„åç§°
+  check(parser.GetNext = jrkString, 'Read attribute name');
+  Check(parser.GetToken = 'hex');
+
+  // è¯»å–å€¼
+  Check(parser.GetNextNonWhiteChar = ':');
+  check(parser.GetNext = jrkString);
+  Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');
+end;
+```
 
 
 
-## ¿ª·¢»·¾³
+## å¼€å‘ç¯å¢ƒ
 
 - windows pro 7 
 - delphi 2010 
