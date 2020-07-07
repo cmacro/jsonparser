@@ -6,6 +6,11 @@ unit uJsonReaders;
 
 interface
 
+//{$define HASINLINE}
+
+
+
+
 uses
   Classes, Windows, SysUtils;
 
@@ -16,19 +21,18 @@ type
     jrkObject, jrkArray);
 
   TJSONReader = record
-    JSON: string;
-    CurIdx: integer;
-    LastIdx: integer;
-    TokenIdx: Integer;
+    JSON: PChar;
+    Curr: PChar;
+    Last: PChar;
+    Token: PChar;
     TokenLen : integer;
     ExistsEscapeChar: Boolean;
-    procedure Init(const aJSON: string; aIndex, aLen: integer);
-    function GetNextChar: char;                           inline;
-    function GetNextNonWhiteChar: char;                   inline;
-    function CheckNextNonWhiteChar(aChar: char): boolean; inline;
+    procedure Init(const AJSON: PChar; ALen: Integer);
+    function GetNextChar: char;                           {$ifdef HASINLINE} inline; {$endif}
+    function GetNextNonWhiteChar: char;                   {$ifdef HASINLINE} inline; {$endif}
     function JSONStrToStr: string;
-    function GetToken: string;                            inline;
-    function GetToStrToken: string;                       inline;
+    function GetToken: string;                            {$ifdef HASINLINE} inline; {$endif}
+    function GetToStrToken: string;                       {$ifdef HASINLINE} inline; {$endif}
 
     function GetNextString: boolean;
     function GetNextToken: string;
@@ -38,12 +42,13 @@ type
 
     function GetDataType: TJSONReaderKind;
     function GetNext: TJSONReaderKind;
+    function GetNextOf(const id: string): TJSONReaderKind;
 
-    function AsStr: string;    inline;
-    function AsInt: Integer;   inline;
-    function AsInt64: Int64;   inline;
-    function AsUInt64: UInt64; inline;
-    function AsFloat: Extended; inline;
+    function AsStr: string;     {$ifdef HASINLINE} inline; {$endif}
+    function AsInt: Integer;    {$ifdef HASINLINE} inline; {$endif}
+    function AsInt64: Int64;    {$ifdef HASINLINE} inline; {$endif}
+    function AsUInt64: UInt64;  {$ifdef HASINLINE} inline; {$endif}
+    function AsFloat: Extended; {$ifdef HASINLINE} inline; {$endif}
   end;
 
 implementation
@@ -59,22 +64,42 @@ uses
 //  PChar(pointer(str))[len] := chr;
 //end;
 
-procedure TJSONReader.Init(const aJSON: string; aIndex, aLen: integer);
+procedure HexTo(c: Char; var d: LongWord); {$ifdef HASINLINE} inline; {$endif}
 begin
-  JSON := aJSON;
-  if aLen > 0 then
-    LastIdx := aLen + aIndex
-  else
-    LastIdx := length(JSON);
-  CurIdx := aIndex;
+  case c of
+    '0'..'9': d := (d shl 4) or LongWord(Ord(c) - Ord('0'));
+    'A'..'F': d := (d shl 4) or LongWord(Ord(c) - (Ord('A') - 10));
+    'a'..'f': d := (d shl 4) or LongWord(Ord(c) - (Ord('a') - 10));
+    else raise Exception.Create('Error Message');
+  end;
+end;
+
+
+
+
+//procedure AppendChar(var str: string; chr: Char);
+//var len: Integer;
+//begin
+//  len := length(str);
+//  SetLength(str,len+1);
+//  PChar(pointer(str))[len] := chr;
+//end;
+
+procedure TJSONReader.Init(const AJSON: PChar; ALen: Integer);
+begin
+  JSON := AJSON;
+  Curr := JSON;
+  if ALen <= 0 then
+    ALen := StrLen(JSON);
+  Last := (Curr + ALen);
 end;
 
 function TJSONReader.GetNextChar: char;
 begin
-  if CurIdx <= LastIdx then
+  if Curr < Last then
   begin
-    result := JSON[CurIdx];
-    inc(CurIdx);
+    Result := Curr^;
+    inc(Curr);
   end
   else
     result := #0;
@@ -82,33 +107,17 @@ end;
 
 function TJSONReader.GetNextNonWhiteChar: char;
 begin
-  if CurIdx<=LastIdx then
+  if Curr < Last then
     repeat
-      if JSON[CurIdx]>' ' then
+      if Curr^ > ' ' then
       begin
-        result := JSON[CurIdx];
-        inc(CurIdx);
+        result := Curr^;
+        inc(Curr);
         exit;
       end;
-      inc(CurIdx);
-    until CurIdx>LastIdx;
+      inc(Curr);
+    until Curr > Last;
   result := #0;
-end;
-
-function TJSONReader.CheckNextNonWhiteChar(aChar: char): boolean;
-begin
-  if CurIdx<=LastIdx then
-    repeat
-      if JSON[CurIdx]>' ' then
-      begin
-        result := JSON[CurIdx] = aChar;
-        if result then
-          inc(CurIdx);
-        exit;
-      end;
-      inc(CurIdx);
-    until CurIdx>LastIdx;
-  result := false;
 end;
 
 procedure TJSONReader.AppendNextStringUnEscape; //(var str: string);
@@ -124,17 +133,17 @@ begin
           c := GetNextChar;
           case c of
             #0: exit;
-            'u': inc(CurIdx, 4);
+            'u': inc(Curr, 4);
           end;
         end;
     end;
-    TokenLen := CurIdx - TokenIdx;
+    TokenLen := (Curr - Token);
   until false;
 end;
 
 function TJSONReader.GetToken: string;
 begin
-  Result := copy(JSON,TokenIdx,tokenLen);
+  SetString(Result, Token, TokenLen);
 end;
 
 function TJSONReader.GetToStrToken: string;
@@ -145,28 +154,34 @@ begin
     Result := JSONStrToStr;
 end;
 
-
 function TJSONReader.GetNextString: boolean;
-var i: integer;
 begin
+  Token := Curr;
+  TokenLen := 0;
   result := false;
-  for i := CurIdx to LastIdx do
-    case JSON[i] of
-    '"': begin // end of string without escape -> direct copy
-          TokenIdx := CurIdx; TokenLen := i- CurIdx;
-          CurIdx := i+1;
+  while Curr < Last do
+  begin
+    case Curr^ of
+    '"': begin
+          TokenLen := Curr - Token;
+          inc(Curr);
           result := true;
           break;
         end;
     '\': begin // need unescaping
           ExistsEscapeChar := True;
-          TokenIdx := CurIdx; TokenLen := i- CurIdx;
-          CurIdx := i;
-          AppendNextStringUnEscape; //(str);
-          result := true;
-          break;
+          case GetNextChar of
+            #0: Exit;
+            'u': begin
+                  inc(Curr, 4);
+                  if Curr >= Last then
+                    Exit;
+                end;
+          end;
         end;
     end;
+    inc(Curr);
+  end;
 end;
 
 function TJSONReader.GetNextToken: string;
@@ -195,15 +210,15 @@ begin
   result := jrkNone;
   case GetNextNonWhiteChar of
     'n': begin //if copy(JSON,CurIdx,3)='ull' then begin
-           inc(CurIdx,3);
+           inc(Curr,3);
            result := jrkNull;
          end;
     'f': begin //if copy(JSON,CurIdx,4)='alse' then begin
-           inc(CurIdx,4);
+           inc(Curr,4);
            result := jrkFalse;
          end;
     't': begin //if copy(JSON,CurIdx,3)='rue' then begin
-           inc(CurIdx,3);
+           inc(Curr,3);
            result := jrkTrue;
          end;
     '"': if GetNextString then begin
@@ -214,25 +229,45 @@ begin
     '[': if ReadJSONArray then
            result := jrkArray;
     '-','0'..'9': begin
-        TokenIdx := CurIdx-1;
+        Token := Curr - 1;
         while true do
-          case JSON[CurIdx] of
-          '-','+','0'..'9','.','E','e': inc(CurIdx);
+          case Curr^ of
+            '-','+','0'..'9','.','E','e': inc(Curr);
           else break;
           end;
-        TokenLen := CurIdx-TokenIdx;
+        TokenLen := Curr - Token;
         Result := jrkNumber;
       end;
   end;
 end;
 
-procedure HexTo(c: Char; var d: LongWord); inline;
+function TJSONReader.GetNextOf(const id: string): TJSONReaderKind;
+var
+  bSurr: Boolean;
+  c: char;
+  I: Integer;
+  k: TJSONReaderKind;
 begin
-  case c of
-    '0'..'9': d := (d shl 4) or LongWord(Ord(c) - Ord('0'));
-    'A'..'F': d := (d shl 4) or LongWord(Ord(c) - (Ord('A') - 10));
-    'a'..'f': d := (d shl 4) or LongWord(Ord(c) - (Ord('a') - 10));
-    else raise Exception.Create('Error Message');
+  Result := jrkNone;
+  while True do
+  begin
+    if GetNext <> jrkString then
+      Break;
+
+    bSurr := SameText(id, AsStr);
+    if not (GetNextNonWhiteChar = ':') then
+      Exit;
+
+    k := GetNext;
+    if bSurr then
+    begin
+      Result := k;
+      Break;
+    end;
+
+    c := GetNextNonWhiteChar;
+    if (c = '}') or (c = #0) then
+      Break;
   end;
 end;
 
@@ -244,8 +279,8 @@ var
   Buf: array[0..MaxBufPos] of Char;
   BufPos, Len: Integer;
   d: LongWord;
-  idx, iEndIdx: Integer;
   s: string;
+  pWordCurr, pWordLast: PChar;
 begin
   if TokenLen <= 0 then
   begin
@@ -254,18 +289,19 @@ begin
   end;
 
   s := '';
-  idx := TokenIdx;
-  iEndIdx := idx + TokenLen;
+  pWordCurr := Token;
+  pWordLast := pWordCurr + TokenLen;
+
   BufPos := 0;
-  while idx < iEndIdx do
+  while pWordCurr < pWordLast do
   begin
-    if JSON[idx] <> '\' then
-      Buf[BufPos] := JSON[idx]
+    if pWordCurr^ <> '\' then
+      Buf[BufPos] := pWordCurr^
     else //if JSON[idx] = '\' do
     begin
-      inc(idx);
-      if idx = iEndIdx then Break;
-      case JSON[idx] of
+      inc(pWordCurr);
+      if pWordCurr >= pWordLast then Break;
+      case pWordCurr^ of
         '"': Buf[BufPos] := '"';
         '\': Buf[BufPos] := '\';
         '/': Buf[BufPos] := '/';
@@ -275,23 +311,19 @@ begin
         'r': Buf[BufPos] := #13;
         't': Buf[BufPos] := #9;
         'u': begin
-            inc(idx);
-            if idx + 3 >= iEndIdx then
-              Break;
-
+            if pWordCurr + 4 >= pWordLast then Break;
             d := 0;
-            HexTo(JSON[idx], d);
-            HexTo(JSON[idx+1], d);
-            HexTo(JSON[idx+2], d);
-            HexTo(JSON[idx+3], d);
+            HexTo((pWordCurr+1)^, d);
+            HexTo((pWordCurr+2)^, d);
+            HexTo((pWordCurr+3)^, d);
+            HexTo((pWordCurr+4)^, d);
             Buf[BufPos] := Char(d);
-            Inc(idx, 3);
+            inc(pWordCurr, 4);
           end;
-      else
-        Break;
+      else  Break;
       end;
     end;
-    Inc(idx);
+    Inc(pWordCurr);
     Inc(BufPos);
 
     if BufPos > MaxBufPos then
@@ -317,52 +349,52 @@ function TJSONReader.ReadJSONArray: boolean;
 var
   level: Integer;
 begin
-  TokenIdx := CurIdx - 1;
+  Token := Curr - 1; // °üÀ¨À¨ºÅ
   level := 0;
   result := false;
-  if CurIdx <= LastIdx then
+  if Curr < Last then
     repeat
-      case JSON[CurIdx] of
+      case Curr^ of
         '[': inc(level);
         ']': begin
           if level = 0 then
           begin
-            inc(CurIdx);
-            TokenLen := CurIdx - TokenIdx;
+            inc(Curr);
+            TokenLen := Curr - Token;
             Result := True;
             Break;
           end;
           dec(level);
         end;
       end;
-      inc(CurIdx);
-    until CurIdx>LastIdx;
+      inc(Curr);
+    until Curr > Last;
 end;
 
 function TJSONReader.ReadJSONObject: boolean;
 var
   level: Integer;
 begin
-  TokenIdx := CurIdx - 1;
+  Token := Curr - 1; // °üÀ¨À¨ºÅ
   level := 0;
   result := false;
-  if CurIdx <= LastIdx then
+  if Curr <= Last then
     repeat
-      case JSON[CurIdx] of
+      case Curr^ of
         '{': inc(level);
         '}': begin
           if level = 0 then
           begin
-            inc(CurIdx);
-            TokenLen := CurIdx - TokenIdx;
+            inc(Curr);
+            TokenLen := Curr - Token;
             Result := True;
             Break;
           end;
           dec(level);
         end;
       end;
-      inc(CurIdx);
-    until CurIdx>LastIdx;
+      inc(Curr);
+    until Curr > Last;
 end;
 
 function TJSONReader.AsStr: string;

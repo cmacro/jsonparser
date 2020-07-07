@@ -15,25 +15,26 @@ uses
   TestFramework, Classes, SysUtils, uJsonReaders, Windows, JsonDataObjects;
 
 type
-  // Test methods for class TTestdata
-
-  TestTJsonReader = class(TTestCase)
+  TTestTJSONPCharReader = class(TTestCase)
   private
-    procedure WriteArray(level: integer; const s: string; Idx, len: Integer);
-    procedure WriteJsonObj(level: integer; const s: string; Idx, len: Integer);
-    function CheckObjectJson(const s: string; idx, len: LongInt;
-      var msg: string): boolean;
-    function CheckArrayJson(const s: string; idx, len: LongInt; var msg: string): boolean;
-    function CheckNodeItem(k: TJSONReaderKind; iIdx: Integer; const sfieldName: string;
-      var r: TJSONReader; cJsonObj: TJsonObject; var msg: string): boolean;
-    function kToBool(k: TJSONReaderKind): boolean;
-    function CheckCompareData(const data: string; var msg: string): Boolean;
+    function CheckObjectJson(s: PChar; len: LongInt; var msg: string): boolean;
+    function CheckArrayJson(s: PChar; len: LongInt; var msg: string): boolean;
+    function CheckNodeItem(k: TJSONReaderKind; const sfieldName: string; var r:
+        TJSONReader; cJsonObj: TJsonObject; var msg: string): boolean;
   public
+    function CheckCompareData(const data: string; var msg: string): Boolean;
     function CheckCompareFile(const fn: string; var msg: string): Boolean;
   published
     procedure TestDefault;
     procedure TestReader;
+    procedure TestBigFile;
+
   end;
+
+function kToBool(k: TJSONReaderKind): boolean;
+
+
+
 
 implementation
 
@@ -49,176 +50,7 @@ uses
       Result[i] := ' ';
   end;
 
-procedure TestTJsonReader.WriteArray(level: integer; const s: string; Idx, len: Integer);
-var
-  c: Char;
-  k: TJSONReaderKind;
-  parser: TJSONReader;
-begin
-//  Writeln(GetIndent(level) + 'read array');
-//  Writeln(GetIndent(level) + '--------------------------');
 
-
-  parser.Init(s, idx, len);
-  Check(parser.GetNextNonWhiteChar = '[');
-
-  while true do
-  begin
-    k := parser.GetNext;
-    if k = jrkNone then Break;
-
-//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
-//    if not (k in [kArray, kObject, kTrue, kFalse, kNull]) then
-//      Writeln('  token: ' + parser.GetToken);
-
-    if k = jrkArray then
-      WriteArray(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = jrkObject then
-      WriteJsonObj(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen);
-
-    c := parser.GetNextNonWhiteChar;
-    Check((c = ',') or (c = #0) or (c = ']'));
-  end;
-
-end;
-
-procedure TestTJsonReader.WriteJsonObj(level: integer; const s: string; Idx, len: Integer);
-var
-  bIsID: Boolean;
-  cTok: Char;
-  k: TJSONReaderKind;
-  parser: TJSONReader;
-begin
-//  Writeln(GetIndent(level) + 'read object');
-//  Writeln(GetIndent(level) + '--------------------------');
-
-  parser.Init(s, idx, len);
-  Check(parser.GetNextNonWhiteChar = '{');
-
-  bIsID := True;
-  while true do
-  begin
-    k := parser.GetNext;
-    if k = jrkNone then Break;
-
-//    Write(GetIndent(level) +  'Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
-//    if not (k in [kArray, kObject, kTrue, kFalse, kNull]) then
-//      Writeln('  token: ' + parser.GetToken);
-
-    if k = jrkArray then
-      WriteArray(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = jrkObject then
-      WriteJsonObj(level + 1, parser.JSON, parser.TokenIdx, parser.TokenLen);
-
-    if bIsID  then
-    begin
-      Check(parser.GetNextNonWhiteChar = ':');
-      bIsID := False;
-    end
-    else
-    begin
-      cTok := parser.GetNextNonWhiteChar;
-      Check((cTok = ',') or (ctok = #0) or (ctok = '}'));
-      bIsID := true;
-    end;
-  end;
-end;
-
-procedure TestTJsonReader.TestDefault;
-var
-  bIsID: Boolean;
-  cstr: TStringStream;
-  cTok: Char;
-  iTickCount: Cardinal;
-  k: TJSONReaderKind;
-  parser: TJSONReader;
-  s: string;
-  I: Integer;
-  iSize: Integer;
-begin
-  parser.Init('{}', 1, -1);
-  Check(not parser.GetNextString, '��Json��ȡ����');
-
-  parser.Init('{"hex": "\u4e2d\u6587\u6d4b\u8bd5"}', 1, -1);
-  check(parser.GetDataType = jrkObject, 'Read Json data type, should be Object');
-
-  check(parser.GetNext = jrkString, 'Read attribute name');
-  Check(parser.GetToken = 'hex');
-
-  Check(parser.GetNextNonWhiteChar = ':');
-  check(parser.GetNext = jrkString);
-  Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');
-  Check(parser.AsStr = '中文测试');
-
-  //Writeln(UTF8ToString(parser.JSONStrToStr));
-
-
-  Writeln('');
-  parser.Init('{"abc": "abc"}', 1, -1);
-  while parser.GetNextString do
-    Writeln(parser.GetToken);
-
-  parser.Init('{"abc": 1}', 1, -1);
-  while parser.GetNextString do
-    Writeln(parser.GetToken);
-
-
-  s := '{"abc": 1,"arr": [1,true,"3", {}, []], "data": {"name": "test" }, "arr": [1,true,"3", {}, []], "Code": 200}';
-  Writeln('Parser Json Obj: ' + s);
-  parser.Init(s, 1, -1);
-  check(parser.GetNextNonWhiteChar = '{');
-
-
-  bIsID := True;
-  while true do
-  begin
-    k := parser.GetNext;
-    if k = jrkNone then Break;
-
-
-    Write('Type: ' + GetEnumName(TypeInfo(TJSONReaderKind), ord(k)));
-    if not (k in [jrkArray, jrkObject, jrkTrue, jrkFalse, jrkNull]) then
-      Writeln('  token: ' + parser.GetToken);
-
-    if k = jrkArray then
-      WriteArray(1, parser.JSON, parser.TokenIdx, parser.TokenLen)
-    else if k = jrkObject then
-      WriteJsonObj(1, parser.JSON, parser.TokenIdx, parser.TokenLen);
-
-    if bIsID  then
-    begin
-      Check(parser.GetNextNonWhiteChar = ':');
-      bIsID := False;
-    end
-    else
-    begin
-      cTok := parser.GetNextNonWhiteChar;
-      Check((cTok = ',') or (ctok = #0) or (ctok = '}'));
-      bIsID := true;
-    end;
-  end;
-
-  Exit;
-  Writeln('read big file ...');
-  cstr := TStringStream.Create.Create('', TEncoding.UTF8);
-  cstr.LoadFromFile('.\data\bpProducts.json');
-  s := cstr.DataString;
-  iSize := Length(s);
-  cstr.Free;
-
-  iTickCount := GetTickCount;
-  for I := 1 to 3 do
-    WriteJsonObj(1, s, 1, -1);
-  iTickCount := GetTickCount - iTickCount;
-  Writeln(format('TickCount read %d size: %d count: %d/%d', [3, iSize, iTickCount div 3, iTickCount]));
-
-end;
-
-
-function JsonToStr(const src: string): string;
-begin
-  
-end;
 
 procedure ReadFileData(const fn: string; var data: string);
 var
@@ -233,24 +65,205 @@ begin
   end;
 end;
 
-function TestTJsonReader.kToBool(k: TJSONReaderKind): boolean;
+
+
+function JsonToStr(const src: string): string;
+begin
+
+end;
+
+function kToBool(k: TJSONReaderKind): boolean;
 begin
   if k = jrkFalse then result := False
   else result := True;
 end;
 
-function TestTJsonReader.CheckNodeItem(k: TJSONReaderKind; iIdx: Integer;
-    const sfieldName: string; var r: TJSONReader; cJsonObj: TJsonObject;
-    var msg: string): boolean;
+
+function TTestTJSONPCharReader.CheckArrayJson(s: PChar; len: LongInt; var msg:
+    string): boolean;
+var
+  bSucc: Boolean;
+  c: Char;
+  iIdx: Integer;
+  k: TJSONReaderKind;
+  r: TJSONReader;
+  cJsonObj: TJsonArray;
+  Current: Integer;
+  jt: TJsonDataType;
+  sNewData: string;
+
+  procedure SetMsg(const s: string);
+  begin
+    msg := format('Index: %d -> %d %s', [Current, r.Curr - r.JSON, s]);
+  end;
+
+begin
+ Result := False;
+ if len <= 0 then
+  len := length(s);
+  r.init(s,len);
+  k := r.GetDataType;
+  if k <> jrkArray then
+    Exit;
+
+  cJsonObj := TJsonArray.Create;
+  try
+    SetString(sNewData, s, len);
+    cJsonObj.FromJSON(sNewData);
+
+    Current := -1;
+    while True do
+    begin
+      inc(Current);
+      iIdx := r.Curr - r.JSON;
+      k := r.GetNext;
+      jt := jdtNone;
+      if k <> jrkNone then
+        jt := cJsonObj.Types[Current];
+
+      case k of
+        jrkNone: begin
+                  if (cJsonObj.Count = Current) then Break;
+                  SetMsg('field not value'); Exit;
+                end;
+        jrkNull: begin
+                  if ((jt = jdtObject) and (cJsonObj.Items[Current].ObjectValue <> nil)) then
+                  begin
+                    SetMsg('Field types None are inconsistent'); Exit;
+                  end;
+                  if not (jt  in [jdtObject,jdtNone]) then
+                  begin
+                    SetMsg('Field types None are inconsistent'); Exit;
+                  end;
+                 end;
+        jrkFalse,
+        jrkTrue :begin
+                  if jt <> jdtBool then
+                  begin
+                    SetMsg('Field types boolean are inconsistent'); Exit;
+                  end;
+                  if cJsonObj.B[Current] <> kToBool(k) then
+                  begin
+                    SetMsg('Field value are inconsistent'); Exit;
+                  end;
+                 end ;
+        jrkString: begin
+                  if jt <> jdtString then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not SameText(r.GetToStrToken, cJsonObj.S[Current]) then
+                  begin
+                    SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent'); Exit;
+                  end;
+                 end;
+        jrkNumber:  begin
+                  if not (jt in [jdtInt, jdtLong, jdtULong, jdtFloat]) then
+                  begin
+                    SetMsg('Field types kNumber are inconsistent'); Exit;
+                  end;
+                  if not SameText(r.GetToken, cJsonObj.S[Current]) then
+                  begin
+                    bSucc := False;
+                    case jt of
+                      jdtInt    : bSucc := r.AsInt = cJsonObj.I[Current];
+                      jdtLong   : bSucc := r.AsInt64 = cJsonObj.L[Current];
+                      jdtULong  : bSucc := r.AsUInt64 = cJsonObj.U[Current];
+                      jdtFloat  : bSucc := SameStr(FloatToStr(r.AsFloat), cJsonObj.S[Current]);
+                    end;
+                    if not bSucc then
+                    begin
+                      SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent');
+                      Exit;
+                    end;
+                  end;
+                 end;
+        jrkObject: begin
+                  if cJsonObj.Types[Current] <> jdtObject then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not CheckObjectJson(r.Token, r.TokenLen, msg) then
+                  begin
+                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]); // InttoStr() +'  ' + msg;
+                    Exit;
+                  end;
+                 end;
+        jrkArray: begin
+                  if cJsonObj.Types[Current] <> jdtArray then
+                  begin
+                    SetMsg('Field types string are inconsistent'); Exit;
+                  end;
+                  if not CheckArrayJson(r.Token, r.TokenLen, msg) then
+                  begin
+                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]);
+                    Exit;
+                  end;
+                 end;
+        else
+        begin
+          SetMsg('unknown type'); Exit;
+        end;
+      end;
+
+      c := r.GetNextNonWhiteChar;
+      if not ((c = ',') or (c = #0) or (c = ']')) then
+      begin
+        SetMsg('the value is not over');
+        Exit;
+      end;
+
+      if (c = #0) or (c = ']') then
+        Break;
+    end;
+  finally
+    cJsonObj.Free;
+  end;
+
+  Result := True;
+
+end;
+
+function TTestTJSONPCharReader.CheckCompareData(const data: string; var msg:
+    string): Boolean;
+var
+  k: TJSONReaderKind;
+  rReader: TJSONReader;
+begin
+  rReader.Init(PChar(data), -1);
+  k := rReader.GetDataType;
+  if k = jrkObject then
+    Result := CheckObjectJson(PChar(data), -1, msg)
+  else if k = jrkArray then
+    Result := CheckArrayJson(PChar(data), -1, msg)
+  else
+  begin
+    msg := 'unknown value';
+    Result := False;
+  end;
+end;
+
+function TTestTJSONPCharReader.CheckCompareFile(const fn: string; var msg:
+    string): Boolean;
+var
+  s: string;
+begin
+  ReadFileData(fn, s);
+  Result := CheckCompareData(s, msg);
+end;
+
+function TTestTJSONPCharReader.CheckNodeItem(k: TJSONReaderKind; const
+    sfieldName: string; var r: TJSONReader; cJsonObj: TJsonObject; var
+    msg: string): boolean;
 
   procedure SetMsg(const s: string);
   var
     d: string;
   begin
-    if iidx < r.CurIdx then
-      d := Copy(r.JSON, iIdx, r.CurIdx - iIdx)
-    else  d := '';
-    msg := format('Index: %d -> %d %s %s', [iIdx, r.CurIdx, s, d]);
+    //if iidx < r.CurIdx then
+    SetString(d, r.Curr, 10);// := Copy(r.JSON, iIdx, r.CurIdx - iIdx)
+    //else  d := '';
+    msg := format('Index: %s', [d]);
   end;
 var
   bSucc: Boolean;
@@ -320,7 +333,7 @@ begin
               begin
                 SetMsg('Field types string are inconsistent'); Exit;
               end;
-              if not CheckObjectJson(r.JSON, r.TokenIdx, r.TokenLen, msg) then
+              if not CheckObjectJson(r.Token, r.TokenLen, msg) then
                 Exit;
              end;
     jrkArray: begin
@@ -328,7 +341,7 @@ begin
               begin
                 SetMsg('Field types string are inconsistent'); Exit;
               end;
-              if not CheckArrayJson(r.JSON, r.TokenIdx, r.TokenLen, msg) then
+              if not CheckArrayJson(r.Token, r.TokenLen, msg) then
                 Exit;
              end;
     else
@@ -341,19 +354,22 @@ begin
 
 end;
 
-function TestTJsonReader.CheckObjectJson(const s: string; idx, len: LongInt; var msg: string): boolean;
+function TTestTJSONPCharReader.CheckObjectJson(s: PChar; len: LongInt; var msg:
+    string): boolean;
 var
   c: Char;
   cJsonObj: TJsonObject;
   k: TJSONReaderKind;
-  rReader: TJsonReader;
-  iIdx: Integer;
+  rReader: TJSONReader;
   sFieldName: string;
   sNewData: string;
 
   procedure SetMsg(const s: string);
+  var
+    d: string;
   begin
-    msg := Format(' fieldname: %s Index:  %d -> %d %s', [sFieldName, iIdx, rReader.CurIdx, s]);
+    SetString(d, rReader.Curr, 10);
+    msg := Format(' fieldname: %s Index:  %s', [sFieldName, d]);
   end;
 
 begin
@@ -361,7 +377,7 @@ begin
   if len <= 0 then
     len := length(s);
 
-  rReader.Init(s, idx, len);
+  rReader.Init(s, len);
   k := rReader.GetDataType;
   if k <> jrkObject then
     Exit;
@@ -369,12 +385,11 @@ begin
   sFieldName := '';
   cJsonObj := TJsonObject.Create;
   try
-    sNewData := Copy(s, idx, len);
+    SetString(sNewData, s, len);
     cJsonObj.FromJSON(sNewData);
 
     while True do
     begin
-      iIdx := rReader.CurIdx;
       k := rReader.GetNext;
       if (k = jrkNone) and (cJsonObj.Count = 0) then
         Break;
@@ -397,12 +412,10 @@ begin
       end;
 
       sFieldName := rReader.GetToStrToken;
-      iIdx := rReader.CurIdx;
       k :=  rReader.GetNext;
-      if not CheckNodeItem(k, iIdx, sFieldName, rReader, cJsonObj, msg) then
+      if not CheckNodeItem(k, sFieldName, rReader, cJsonObj, msg) then
         Exit;
 
-      iIdx := rReader.CurIdx;
       c := rReader.GetNextNonWhiteChar;
       if not ((c = ',') or (c = #0) or (c = '}')) then
       begin
@@ -424,194 +437,91 @@ begin
 
 end;
 
-function TestTJsonReader.CheckArrayJson(const s: string; idx, len: LongInt; var msg: string): boolean;
+{ TTestTJSONPCharReader }
+
+procedure TTestTJSONPCharReader.TestBigFile;
 var
-  bSucc: Boolean;
-  c: Char;
-  iIdx: Integer;
-  k: TJSONReaderKind;
-  r: TJsonReader;
-  cJsonObj: TJsonArray;
-  Current: Integer;
-  jt: TJsonDataType;
-  sNewData: string;
-
-  procedure SetMsg(const s: string);
-  begin
-    msg := format('Index: %d -> %d %s', [iIdx, r.CurIdx, s]);
-  end;
-
-begin
- Result := False;
- if len <= 0 then
-  len := length(s);
-  r.Init(s, idx, len);
-  k := r.GetDataType;
-  if k <> jrkArray then
-    Exit;
-
-  cJsonObj := TJsonArray.Create;
-  try
-    sNewData := Copy(s, idx, len);
-    cJsonObj.FromJSON(sNewData);
-
-    Current := -1;
-    while True do
-    begin
-      inc(Current);
-      iIdx := r.CurIdx;
-      k := r.GetNext;
-      jt := jdtNone;
-      if k <> jrkNone then
-        jt := cJsonObj.Types[Current];
-
-      case k of
-        jrkNone: begin
-                  if (cJsonObj.Count = Current) then Break;
-                  SetMsg('field not value'); Exit;
-                end;
-        jrkNull: begin
-                  if ((jt = jdtObject) and (cJsonObj.Items[Current].ObjectValue <> nil)) then
-                  begin
-                    SetMsg('Field types None are inconsistent'); Exit;
-                  end;
-                  if not (jt  in [jdtObject,jdtNone]) then
-                  begin
-                    SetMsg('Field types None are inconsistent'); Exit;
-                  end;
-                 end;
-        jrkFalse,
-        jrkTrue :begin
-                  if jt <> jdtBool then
-                  begin
-                    SetMsg('Field types boolean are inconsistent'); Exit;
-                  end;
-                  if cJsonObj.B[Current] <> kToBool(k) then
-                  begin
-                    SetMsg('Field value are inconsistent'); Exit;
-                  end;
-                 end ;
-        jrkString: begin
-                  if jt <> jdtString then
-                  begin
-                    SetMsg('Field types string are inconsistent'); Exit;
-                  end;
-                  if not SameText(r.GetToStrToken, cJsonObj.S[Current]) then
-                  begin
-                    SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent'); Exit;
-                  end;
-                 end;
-        jrkNumber:  begin
-                  if not (jt in [jdtInt, jdtLong, jdtULong, jdtFloat]) then
-                  begin
-                    SetMsg('Field types kNumber are inconsistent'); Exit;
-                  end;
-                  if not SameText(r.GetToken, cJsonObj.S[Current]) then
-                  begin
-                    bSucc := False;
-                    case jt of
-                      jdtInt    : bSucc := r.AsInt = cJsonObj.I[Current];
-                      jdtLong   : bSucc := r.AsInt64 = cJsonObj.L[Current];
-                      jdtULong  : bSucc := r.AsUInt64 = cJsonObj.U[Current];
-                      jdtFloat  : bSucc := SameStr(FloatToStr(r.AsFloat), cJsonObj.S[Current]);
-                    end;
-                    if not bSucc then
-                    begin
-                      SetMsg('Field value '+ cJsonObj.S[Current] +' are inconsistent');
-                      Exit;
-                    end;
-                  end;
-                 end;
-        jrkObject: begin
-                  if cJsonObj.Types[Current] <> jdtObject then
-                  begin
-                    SetMsg('Field types string are inconsistent'); Exit;
-                  end;
-                  if not CheckObjectJson(s, r.TokenIdx, r.TokenLen, msg) then
-                  begin
-                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]); // InttoStr() +'  ' + msg;
-                    Exit;
-                  end;
-                 end;
-        jrkArray: begin
-                  if cJsonObj.Types[Current] <> jdtArray then
-                  begin
-                    SetMsg('Field types string are inconsistent'); Exit;
-                  end;
-                  if not CheckArrayJson(s, r.TokenIdx, r.TokenLen, msg) then
-                  begin
-                    msg := format('Index: %d, Current: %d %s', [iIdx, Current, msg]);
-                    Exit;
-                  end;
-                 end;
-        else
-        begin
-          SetMsg('unknown type'); Exit;
-        end;
-      end;
-
-      c := r.GetNextNonWhiteChar;
-      if not ((c = ',') or (c = #0) or (c = ']')) then
-      begin
-        SetMsg('the value is not over');
-        Exit;
-      end;
-
-      if (c = #0) or (c = ']') then
-        Break;
-    end;
-  finally
-    cJsonObj.Free;
-  end;
-
-  Result := True;
-
-end;
-
-function TestTJsonReader.CheckCompareData(const data: string; var msg: string):Boolean;
-var
-  k: TJSONReaderKind;
-  rReader: TJsonReader;
-begin
-  rReader.Init(data, 1, -1);
-  k := rReader.GetDataType;
-  if k = jrkObject then
-    Result := CheckObjectJson(data, 1, -1, msg)
-  else if k = jrkArray then
-    Result := CheckArrayJson(data, 1, -1, msg)
-  else
-  begin
-    msg := 'unknown value';
-    Result := False;
-  end;
-end;
-
-function TestTJsonReader.CheckCompareFile(const fn: string; var msg: string):Boolean;
-var
+  iTick: Cardinal;
+  cStr: TStringStream;
+  r: TJSONReader;
+  LChars: TCharArray;
   s: string;
 begin
-  ReadFileData(fn, s);
-  Result := CheckCompareData(s, msg);
+  iTick := GetTickCount;
+
+//  cStr := TStringStream.Create('', TEncoding.UTF8);
+//  try
+//    cStr.LoadFromFile('.\data\bpProducts.json');
+//    LChars := TEncoding.UTF8.GetChars(cStr.Bytes);
+//  finally
+//    cStr.Free;
+//  end;
+
+
+    //s := cStr.DataString; // cStr.DataString TStringBuilder.Create;
+
+//    r.Init(PChar(LChars), -1);
+//    r.GetDataType;
+
+
+
+//  Check(CheckCompareFile('.\data\bpProducts.json', msg), 'parser bpProducts.json file：' + msg);
+//  iTick := GetTickCount - iTick;
+//  Writeln('   tickcount :' + inttostr(iTick));
+
 end;
 
-procedure TestTJsonReader.TestReader;
+procedure TTestTJSONPCharReader.TestDefault;
 var
+  parser: TJSONReader;
+  s: string;
+
+  procedure SetParserStr(const d: string);
+  begin
+    s := d;
+    parser.Init(PChar(s), -1);
+  end;
+
+begin
+  SetParserStr('{}');
+  Check(parser.GetNextNonWhiteChar = '{', 'Is empty object');
+  Check(parser.GetNext = jrkNone, 'Is empty object');
+
+  SetParserStr('{"hex": "\u4e2d\u6587\u6d4b\u8bd5", "abc": 1}');
+  check(parser.GetDataType = jrkObject, 'Read Json data type, should be Object');
+  check(parser.GetNext = jrkString, 'Read attribute name');
+  Check(parser.GetToken = 'hex');
+
+  Check(parser.GetNextNonWhiteChar = ':');
+  check(parser.GetNext = jrkString);
+  Check(parser.GetToken = '\u4e2d\u6587\u6d4b\u8bd5', 'read token err');
+  Check(parser.AsStr = '中文测试');
+
+  SetParserStr('{"hex": "\u4e2d\u6587\u6d4b\u8bd5", "abc": 1}');
+  parser.GetDataType;
+  Check(parser.GetNextOf('abc') = jrkNumber);
+  Check(parser.AsInt = 1);
+
+
+end;
+
+procedure TTestTJSONPCharReader.TestReader;
+var
+  iTick: Cardinal;
   msg: string;
 begin
-  Check(CheckCompareData('{"foo": "bar"}', msg), 'test object ' + msg);
-  Check(CheckCompareData('{"foo": "\\\\"}', msg), 'test escaped backslash ' + msg);
-  Check(CheckCompareData('{"foo": "\\\\\\\""}', msg), 'test escaped chars ' + msg);
-  Check(CheckCompareData('{"foo": "\\\\\\n"}', msg), 'test escaped \\n ' + msg);
-  Check(CheckCompareData('{"foo": "bar\\nbar"}', msg),  'test string with escaped line break ' + msg);
-
-  Writeln(' parser passes json file');
+  Writeln(' TJSONReader passes json file');
+  iTick := GetTickCount;
   Check(CheckCompareFile('.\passes\1.json', msg), 'parser passes 1.json file：' + msg);
   Check(CheckCompareFile('.\passes\2.json', msg), 'parser passes 2.json file：' + msg);
   Check(CheckCompareFile('.\passes\3.json', msg), 'parser passes 3.json file：' + msg);
+  iTick := GetTickCount - iTick;
+  Writeln('   tickcount :' + inttostr(iTick));
+
 end;
 
 initialization
   // Register any test cases with the test runner
-  RegisterTest(TestTJsonReader.Suite);
+  RegisterTest(TTestTJSONPCharReader.Suite);
 end.
 

@@ -20,6 +20,7 @@
 			<Base>true</Base>
 		</PropertyGroup>
 		<PropertyGroup Condition="'$(Base)'!=''">
+			<DCC_DebugDCUs>true</DCC_DebugDCUs>
 			<ImageDebugInfo>true</ImageDebugInfo>
 			<DCC_MapFile>3</DCC_MapFile>
 			<DCC_ExeOutput>..\bin</DCC_ExeOutput>
