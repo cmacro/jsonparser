@@ -8,9 +8,6 @@ interface
 
 //{$define HASINLINE}
 
-
-
-
 uses
   Classes, Windows, SysUtils;
 
@@ -20,29 +17,43 @@ type
     jrkNumber, // 不确定 int 还是 float 类型
     jrkObject, jrkArray);
 
+  TTokenData = record
+    Kind: TJSONReaderKind;
+    ExistsEscapeChar: Boolean;
+    Data: PChar;
+    Len : Cardinal;
+  end;
+
+  TGetJsonDataFun = reference to function(const AID: string; const AData: TTokenData): Boolean;
+  TGetArrayDataFun = reference to function(AIndex: Integer; const AData: TTokenData): Boolean;
+
+
   TJSONReader = record
     JSON: PChar;
     Curr: PChar;
     Last: PChar;
-    Token: PChar;
-    TokenLen : integer;
+    // token Data record
+    Kind: TJSONReaderKind;
     ExistsEscapeChar: Boolean;
+    Token: PChar;
+    TokenLen : Cardinal;
+
     procedure Init(const AJSON: PChar; ALen: Integer);
+    procedure reset;                                      {$ifdef HASINLINE} inline; {$endif}
     function GetNextChar: char;                           {$ifdef HASINLINE} inline; {$endif}
     function GetNextNonWhiteChar: char;                   {$ifdef HASINLINE} inline; {$endif}
-    function JSONStrToStr: string;
     function GetToken: string;                            {$ifdef HASINLINE} inline; {$endif}
     function GetToStrToken: string;                       {$ifdef HASINLINE} inline; {$endif}
-
     function GetNextString: boolean;
-    function GetNextToken: string;
     function ReadJSONObject: boolean;
     function ReadJSONArray: boolean;
     procedure AppendNextStringUnEscape; //(var str: string);
 
-    function GetDataType: TJSONReaderKind;
-    function GetNext: TJSONReaderKind;
-    function GetNextOf(const id: string): TJSONReaderKind;
+    function  GetDataType: TJSONReaderKind;
+    function  GetNext: TJSONReaderKind;
+    function  GetNextOf(const id: string): TJSONReaderKind;
+    procedure EatchObjID(ACall: TGetJsonDataFun);
+    procedure EatchArray(ACall: TGetArrayDataFun);
 
     function AsStr: string;     {$ifdef HASINLINE} inline; {$endif}
     function AsInt: Integer;    {$ifdef HASINLINE} inline; {$endif}
@@ -51,18 +62,13 @@ type
     function AsFloat: Extended; {$ifdef HASINLINE} inline; {$endif}
   end;
 
+  function TokenToStr(const v: TTokenData): string; {$ifdef HASINLINE} inline; {$endif}
+  function DecodeJSONToStr(Token: PChar; TokenLen: Cardinal): string;
+
 implementation
 
 uses
   Math;
-
-//procedure AppendChar(var str: string; chr: Char);
-//var len: Integer;
-//begin
-//  len := length(str);
-//  SetLength(str,len+1);
-//  PChar(pointer(str))[len] := chr;
-//end;
 
 procedure HexTo(c: Char; var d: LongWord); {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -75,203 +81,15 @@ begin
 end;
 
 
-
-
-//procedure AppendChar(var str: string; chr: Char);
-//var len: Integer;
-//begin
-//  len := length(str);
-//  SetLength(str,len+1);
-//  PChar(pointer(str))[len] := chr;
-//end;
-
-procedure TJSONReader.Init(const AJSON: PChar; ALen: Integer);
+function TokenToStr(const v: TTokenData): string;
 begin
-  JSON := AJSON;
-  Curr := JSON;
-  if ALen <= 0 then
-    ALen := StrLen(JSON);
-  Last := (Curr + ALen);
-end;
-
-function TJSONReader.GetNextChar: char;
-begin
-  if Curr < Last then
-  begin
-    Result := Curr^;
-    inc(Curr);
-  end
+  if not v.ExistsEscapeChar then
+    SetString(Result, v.Data, v.Len)
   else
-    result := #0;
+    Result := DecodeJSONToStr(v.Data, v.Len);
 end;
 
-function TJSONReader.GetNextNonWhiteChar: char;
-begin
-  if Curr < Last then
-    repeat
-      if Curr^ > ' ' then
-      begin
-        result := Curr^;
-        inc(Curr);
-        exit;
-      end;
-      inc(Curr);
-    until Curr > Last;
-  result := #0;
-end;
-
-procedure TJSONReader.AppendNextStringUnEscape; //(var str: string);
-var
-  c: char;
-begin
-  repeat
-    c := GetNextChar;
-    case c of
-      #0: exit;
-      '"': break;
-      '\': begin
-          c := GetNextChar;
-          case c of
-            #0: exit;
-            'u': inc(Curr, 4);
-          end;
-        end;
-    end;
-    TokenLen := (Curr - Token);
-  until false;
-end;
-
-function TJSONReader.GetToken: string;
-begin
-  SetString(Result, Token, TokenLen);
-end;
-
-function TJSONReader.GetToStrToken: string;
-begin
-  if not ExistsEscapeChar then
-    Result := GetToken
-  else
-    Result := JSONStrToStr;
-end;
-
-function TJSONReader.GetNextString: boolean;
-begin
-  Token := Curr;
-  TokenLen := 0;
-  result := false;
-  while Curr < Last do
-  begin
-    case Curr^ of
-    '"': begin
-          TokenLen := Curr - Token;
-          inc(Curr);
-          result := true;
-          break;
-        end;
-    '\': begin // need unescaping
-          ExistsEscapeChar := True;
-          case GetNextChar of
-            #0: Exit;
-            'u': begin
-                  inc(Curr, 4);
-                  if Curr >= Last then
-                    Exit;
-                end;
-          end;
-        end;
-    end;
-    inc(Curr);
-  end;
-end;
-
-function TJSONReader.GetNextToken: string;
-begin
-  if GetNextString then
-    Result := GetToken
-  else result := '';
-end;
-
-function TJSONReader.GetDataType: TJSONReaderKind;
-begin
-  // 第一次读取
-  //   确定数据类型： 1、对象类型
-  //                  2、数组类型
-  //
-  case GetNextNonWhiteChar of
-    '{': Result := jrkObject;
-    '[': Result := jrkArray;
-    else Result := jrkNone;
-  end;
-end;
-
-function TJSONReader.GetNext: TJSONReaderKind;
-begin
-  ExistsEscapeChar := False;
-  result := jrkNone;
-  case GetNextNonWhiteChar of
-    'n': begin //if copy(JSON,CurIdx,3)='ull' then begin
-           inc(Curr,3);
-           result := jrkNull;
-         end;
-    'f': begin //if copy(JSON,CurIdx,4)='alse' then begin
-           inc(Curr,4);
-           result := jrkFalse;
-         end;
-    't': begin //if copy(JSON,CurIdx,3)='rue' then begin
-           inc(Curr,3);
-           result := jrkTrue;
-         end;
-    '"': if GetNextString then begin
-           result := jrkString;
-         end;
-    '{': if ReadJSONObject then
-           result := jrkObject;
-    '[': if ReadJSONArray then
-           result := jrkArray;
-    '-','0'..'9': begin
-        Token := Curr - 1;
-        while true do
-          case Curr^ of
-            '-','+','0'..'9','.','E','e': inc(Curr);
-          else break;
-          end;
-        TokenLen := Curr - Token;
-        Result := jrkNumber;
-      end;
-  end;
-end;
-
-function TJSONReader.GetNextOf(const id: string): TJSONReaderKind;
-var
-  bSurr: Boolean;
-  c: char;
-  I: Integer;
-  k: TJSONReaderKind;
-begin
-  Result := jrkNone;
-  while True do
-  begin
-    if GetNext <> jrkString then
-      Break;
-
-    bSurr := SameText(id, AsStr);
-    if not (GetNextNonWhiteChar = ':') then
-      Exit;
-
-    k := GetNext;
-    if bSurr then
-    begin
-      Result := k;
-      Break;
-    end;
-
-    c := GetNextNonWhiteChar;
-    if (c = '}') or (c = #0) then
-      Break;
-  end;
-end;
-
-function TJSONReader.JSONStrToStr: string;
+function DecodeJSONToStr(Token: PChar; TokenLen: Cardinal): string;
 
 const
   MaxBufPos = 127;
@@ -343,6 +161,244 @@ begin
   end;
 
   Result := s;
+end;
+
+procedure TJSONReader.Init(const AJSON: PChar; ALen: Integer);
+begin
+  JSON := AJSON;
+  Curr := JSON;
+  if ALen <= 0 then
+    ALen := StrLen(JSON);
+  Last := (Curr + ALen);
+  Kind := jrkNone;
+end;
+
+procedure TJSONReader.reset;
+begin
+  Curr := JSON;
+  Kind := jrkNone;
+end;
+
+function TJSONReader.GetNextChar: char;
+begin
+  if Curr < Last then
+  begin
+    Result := Curr^;
+    inc(Curr);
+  end
+  else
+    result := #0;
+end;
+
+function TJSONReader.GetNextNonWhiteChar: char;
+begin
+  if Curr < Last then
+    repeat
+      if Curr^ > ' ' then
+      begin
+        result := Curr^;
+        inc(Curr);
+        exit;
+      end;
+      inc(Curr);
+    until Curr > Last;
+  result := #0;
+end;
+
+procedure TJSONReader.AppendNextStringUnEscape; //(var str: string);
+var
+  c: char;
+begin
+  repeat
+    c := GetNextChar;
+    case c of
+      #0: exit;
+      '"': break;
+      '\': begin
+          c := GetNextChar;
+          case c of
+            #0: exit;
+            'u': inc(Curr, 4);
+          end;
+        end;
+    end;
+    TokenLen := (Curr - Token);
+  until false;
+end;
+
+function TJSONReader.GetToken: string;
+begin
+  SetString(Result, Token, TokenLen);
+end;
+
+function TJSONReader.GetToStrToken: string;
+begin
+  if not ExistsEscapeChar then
+    Result := GetToken
+  else
+    Result := DecodeJSONToStr(Token, TokenLen);
+end;
+
+
+function TJSONReader.GetNextString: boolean;
+begin
+  Token := Curr;
+  TokenLen := 0;
+  result := false;
+  while Curr < Last do
+  begin
+    case Curr^ of
+    '"': begin
+          TokenLen := Curr - Token;
+          inc(Curr);
+          result := true;
+          break;
+        end;
+    '\': begin // need unescaping
+          ExistsEscapeChar := True;
+          case GetNextChar of
+            #0: Exit;
+            'u': begin
+                  inc(Curr, 4);
+                  if Curr >= Last then
+                    Exit;
+                end;
+          end;
+        end;
+    end;
+    inc(Curr);
+  end;
+end;
+
+function TJSONReader.GetDataType: TJSONReaderKind;
+begin
+  // 第一次读取
+  //   确定数据类型： 1、对象类型
+  //                  2、数组类型
+  //
+  case GetNextNonWhiteChar of
+    '{': Kind := jrkObject;
+    '[': Kind := jrkArray;
+    else Kind := jrkNone;
+  end;
+  Result := Kind;
+end;
+
+function TJSONReader.GetNext: TJSONReaderKind;
+begin
+  ExistsEscapeChar := False;
+  Kind := jrkNone;
+  case GetNextNonWhiteChar of
+    'n': begin inc(Curr,3); Kind := jrkNull; end;
+    'f': begin inc(Curr,4); Kind := jrkFalse; end;
+    't': begin inc(Curr,3); Kind := jrkTrue; end;
+    '"': if GetNextString   then Kind := jrkString;
+    '{': if ReadJSONObject  then Kind := jrkObject;
+    '[': if ReadJSONArray   then Kind := jrkArray;
+    '-','0'..'9': begin
+        Token := Curr - 1;
+        while true do
+          case Curr^ of
+            '-','+','0'..'9','.','E','e': inc(Curr);
+          else break;
+          end;
+        TokenLen := Curr - Token;
+        Kind := jrkNumber;
+      end;
+  end;
+  Result := Kind;
+end;
+
+function TJSONReader.GetNextOf(const id: string): TJSONReaderKind;
+var
+  bSurr: Boolean;
+  c: char;
+begin
+  Kind := jrkNone;
+  while True do
+  begin
+    if GetNext <> jrkString then
+      Break;
+
+    bSurr := SameText(id, AsStr);
+    if not (GetNextNonWhiteChar = ':') then
+    begin
+      Kind := jrkNone;
+      Exit(Kind);
+    end;
+
+    GetNext;
+    if bSurr then
+    begin
+      Result := Kind;
+      Exit;
+    end;
+
+    c := GetNextNonWhiteChar;
+    if (c = '}') or (c = #0) then
+      Break;
+  end;
+
+  Result := Kind;
+
+end;
+
+procedure TJSONReader.EatchObjID(ACall: TGetJsonDataFun);
+var
+  c: char;
+  sID: string;
+  rData: TTokenData;
+begin
+  while True do
+  begin
+    if GetNext <> jrkString then
+      Break;
+
+    sID := GetToken;
+    if GetNextNonWhiteChar <> ':' then
+      Break;
+
+    rData.Kind := GetNext;
+    if rData.Kind = jrkNone then
+      Break;
+
+    rData.Data := Token;
+    rData.Len := TokenLen;
+    rData.ExistsEscapeChar := ExistsEscapeChar;
+
+    if not ACall(sID, rData) then
+      Break;
+
+    c := GetNextNonWhiteChar;
+    if (c = '}') or (c = #0) then
+      Break;
+  end;
+end;
+
+procedure TJSONReader.EatchArray(ACall: TGetArrayDataFun);
+var
+  c: char;
+  rData: TTokenData;
+  iIndex: Integer;
+begin
+  iIndex := 0;
+  while True do
+  begin
+    rData.Kind := GetNext;
+    if rData.Kind = jrkNone then
+      Break;
+
+    rData.Data := Token;
+    rData.Len := TokenLen;
+    rData.ExistsEscapeChar := ExistsEscapeChar;
+    if not ACall(iIndex, rData) then
+      Break;
+
+    inc(iIndex);
+    c := GetNextNonWhiteChar;
+    if (c = ']') or (c = #0) then
+      Break;
+  end;
 end;
 
 function TJSONReader.ReadJSONArray: boolean;

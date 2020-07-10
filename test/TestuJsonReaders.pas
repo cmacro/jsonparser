@@ -440,14 +440,7 @@ end;
 { TTestTJSONPCharReader }
 
 procedure TTestTJSONPCharReader.TestBigFile;
-var
-  iTick: Cardinal;
-  cStr: TStringStream;
-  r: TJSONReader;
-  LChars: TCharArray;
-  s: string;
 begin
-  iTick := GetTickCount;
 
 //  cStr := TStringStream.Create('', TEncoding.UTF8);
 //  try
