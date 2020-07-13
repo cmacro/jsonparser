@@ -20,7 +20,7 @@
 			<Base>true</Base>
 		</PropertyGroup>
 		<PropertyGroup Condition="'$(Base)'!=''">
-			<DCC_DebugDCUs>true</DCC_DebugDCUs>
+			<DCC_UsePackage>rtl;vcl;vclx;vclimg;vclactnband;dbrtl;vcldb;vcldbx;bdertl;vcltouch;xmlrtl;dsnap;TeeUI;TeeDB;Tee;vclib;ibxpress;adortl;inet;intrawebdb_100_140;Intraweb_100_140;VclSmp;vclie;websnap;webdsnap;inetdb;dsnapcon;inetdbbde;inetdbxpress;soaprtl;vclribbon;DbxCommonDriver;DbxClientDriver;DBXInterBaseDriver;DBXMySQLDriver;DBXFirebirdDriver;DBXSybaseASEDriver;DBXSybaseASADriver;DBXOracleDriver;DBXMSSQLDriver;DBXInformixDriver;DBXDb2Driver;dbexpress;dbxcds;dxCoreD14;cxLibraryD14;cxEditorsD14;cxExtEditorsD14;cxPageControlD14;cxGridD14;cxTreeListD14;dxLayoutControlD14;cxBarEditItemD14;cxVerticalGridD14;cxPivotGridD14;cxPivotGridChartD14;DropMasterVcl;frx14;frxADO14;frxcs14;SkinEngine;dxNavBarD14;IndyCore140;IndySystem140;IndyProtocols140;dxThemeD14;dxGDIPlusD14;cxDataD14;FMTranslateD14;frxe14;FlowImage;dxBarD14;GR32_DSGN_RS2010;GR32_RS2010;dxdbtrD14;FMClientDataSetD14;FumaControlsD14</DCC_UsePackage>
 			<ImageDebugInfo>true</ImageDebugInfo>
 			<DCC_MapFile>3</DCC_MapFile>
 			<DCC_ExeOutput>..\bin</DCC_ExeOutput>
@@ -99,10 +99,7 @@
 						<VersionInfoKeys Name="ProductVersion">1.0.0.0</VersionInfoKeys>
 						<VersionInfoKeys Name="Comments"/>
 					</VersionInfoKeys>
-					<Excluded_Packages>
-						<Excluded_Packages Name="$(BDS)\bin\dcloffice2k140.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-						<Excluded_Packages Name="$(BDS)\bin\dclofficexp140.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
-					</Excluded_Packages>
+					<Excluded_Packages/>
 					<Source>
 						<Source Name="MainSource">JsonReaderTest.dpr</Source>
 					</Source>

@@ -25,9 +25,12 @@ type
     function CheckCompareData(const data: string; var msg: string): Boolean;
     function CheckCompareFile(const fn: string; var msg: string): Boolean;
   published
+    procedure TestEatchData;
     procedure TestDefault;
     procedure TestReader;
     procedure TestBigFile;
+    procedure Testfails;
+    procedure TestFile;
 
   end;
 
@@ -440,6 +443,7 @@ end;
 { TTestTJSONPCharReader }
 
 procedure TTestTJSONPCharReader.TestBigFile;
+
 begin
 
 //  cStr := TStringStream.Create('', TEncoding.UTF8);
@@ -494,6 +498,243 @@ begin
   parser.GetDataType;
   Check(parser.GetNextOf('abc') = jrkNumber);
   Check(parser.AsInt = 1);
+
+
+end;
+
+procedure TTestTJSONPCharReader.TestEatchData;
+var
+  sData: string;
+  reader: TJSONReader;
+begin
+  Exit;
+  ReadFileData('.\passes\1.json', sData);
+  reader.Init(PChar(sData), -1);
+  Check(reader.GetDataType = jrkArray);
+  reader.EatchArray(function (index: Integer; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    writeln(GetEnumName(TypeInfo(TJSONReaderKind),Ord(AToken.Kind)));
+  end);
+
+  ReadFileData('.\passes\3.json', sData);
+  reader.Init(PChar(sData), -1);
+  Check(reader.GetDataType = jrkObject);
+  reader.EatchObjID(function (const AID: string; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    write(AID);
+    write(' = ');
+    writeln('type:' + GetEnumName(TypeInfo(TJSONReaderKind),Ord(AToken.Kind)));
+  end);
+
+
+end;
+
+procedure TTestTJSONPCharReader.Testfails;
+var
+  sData: string;
+  r: TJSONReader;
+  function readerinit(const s: string): TJSONReaderKind;
+  begin
+    sData := s;
+    r.Init(PChar(sData), -1);
+    result := r.GetDataType;
+  end;
+
+  function readKey: string;
+  begin
+    Result := '';
+    if r.GetNext = jrkString then
+    begin
+      Result := r.AsStr;
+      if r.GetNextNonWhiteChar <> ':' then
+        Result := '';
+    end;
+  end;
+
+begin
+  writeln('Test Fails Data!');
+
+  Check(readerinit('["Unclosed array"') = jrkArray);
+  Check(r.GetNext = jrkString);
+  Check(r.GetNextNonWhiteChar = #0);
+  r.reset;
+  r.EatchArray(function (index:Integer; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    Check(index < 1, 'Unclosed array'); //
+  end);
+
+
+
+  Check(readerinit('{unquoted_key: "keys must be quoted"}') = jrkObject, 'unquoted_key');
+  Check(r.GetNext = jrkNone, 'unquoted_key');
+
+  Check(readerinit('["extra comma",]') = jrkArray, 'extra comma');
+  Check(r.GetNext = jrkString, 'extra comma');
+  Check(r.GetNextNonWhiteChar = ',', 'extra comma');
+  Check(r.GetNext = jrkNone, 'extra comma');
+
+  Check(readerinit('["double extra comma",,]') = jrkArray, 'double extra comma');
+  Check(r.GetNext = jrkString, 'double extra comma');
+  Check(r.GetNextNonWhiteChar = ',', 'double extra comma');
+  Check(r.GetNext = jrkNone, 'double extra comma');
+
+  Check(readerinit('[   , "<-- missing value"]') = jrkArray);
+  Check(r.GetNext = jrkNone);
+
+  Check(readerinit('["Comma after the close"],') = jrkArray, 'Comma after the close');
+  Check(r.GetNext = jrkString, 'Comma after the close');
+  Check(r.GetNextNonWhiteChar = ']', 'Comma after the close');
+  Check(r.GetNext = jrkNone, 'Comma after the close'); // 此处允许无错误
+  r.reset;
+  r.EatchArray(function (index:Integer; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    Check(index < 1, 'Comma after the close'); //
+  end);
+
+  Check(readerinit('["Extra close"]]') = jrkarray, 'Extra close');
+  Check(r.GetNext = jrkString, 'Extra close');
+  Check(r.GetNextNonWhiteChar = ']', 'Extra close');
+  Check(r.GetNext = jrkNone, 'Extra close'); // 此处允许无错误
+  r.reset;
+  r.EatchArray(function (index:Integer; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    Check(index < 1, 'Extra close'); //
+  end);
+
+  Check(readerinit('{"Extra comma": true,}') = jrkObject);
+  Check(r.GetNext = jrkString);
+  Check(r.GetNextNonWhiteChar = ':');
+  Check(r.GetNext = jrkTrue);
+  Check(r.GetNextNonWhiteChar = ',');
+  Check(r.GetNext = jrkNone, 'Extra comma');
+  r.reset;
+  r.EatchObjID(function (const AID:string; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    Check(AID = 'Extra comma' , 'Extra comma'); // 第二个不会被读取
+  end);
+
+  Check(readerinit('{"Extra value after close": true} "misplaced quoted value"') = jrkObject, 'Extra value after close');
+  Check(r.GetNext = jrkString, 'Extra value after close');
+  Check(r.GetNextNonWhiteChar = ':', 'Extra value after close');
+  Check(r.GetNext = jrkTrue, 'Extra value after close');
+  Check(r.GetNextNonWhiteChar = '}', 'Extra value after close');
+  r.reset;
+  r.EatchObjID(function (const AID:string; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    Check(AID = 'Extra value after close' , 'Extra value after close'); // 第二个不会被读取
+  end);
+
+  Check(readerinit('{"Illegal expression": 1 + 2}') = jrkObject, 'Illegal expression');
+  Check(r.GetNext = jrkString, 'Illegal expression');
+  Check(r.GetNextNonWhiteChar = ':', 'Illegal expression');
+  Check(r.GetNext = jrkNumber, 'Illegal expression');
+  Check(r.GetNextNonWhiteChar = '+', 'Illegal expression');
+  r.reset;
+  r.EatchObjID(function (const AID: string; const AToken: TTokenData): boolean
+  begin
+    check(AID = 'Illegal expression', 'Illegal expression'); // 只有一个Key
+    check(AToken.Kind = jrkNumber, 'Illegal expression');
+  end);
+
+
+  Check(readerinit('{"Illegal invocation": alert()}') = jrkObject, 'Illegal invocation');
+  Check(r.GetNext = jrkString, 'Illegal invocation');
+  Check(r.GetNextNonWhiteChar = ':', 'Illegal invocation');
+  Check(r.GetNext = jrkNone, 'Illegal invocation');
+
+  Check(readerinit('{"Numbers cannot have leading zeroes": 013}') = jrkObject, 'Numbers cannot have leading zeroes');
+  Check(readKey = 'Numbers cannot have leading zeroes', 'Numbers cannot have leading zeroes');
+  Check(r.GetNext = jrkNumber, 'Numbers cannot have leading zeroes');
+  Check(r.AsInt = 13, 'Numbers cannot have leading zeroes');
+
+  Check(readerinit('{"Numbers cannot be hex": 0x14}') = jrkObject, 'Numbers cannot be hex');
+  Check(readKey = 'Numbers cannot be hex', 'Numbers cannot be hex');
+  Check(r.GetNext = jrkNumber, 'Numbers cannot be hex');
+  Check(r.GetNext = jrkNone, 'Numbers cannot be hex');
+
+
+
+  Check(readerinit('{"resultParamList":{},"dataList":[["[StringConcat]{}"]],"fieldTypeList":[["abc"]]"}') = jrkObject);
+  Check(readKey = 'resultParamList');
+  Check(r.GetNext = jrkObject);
+  Check(r.GetNextNonWhiteChar = ',');
+  Check(readKey = 'dataList');
+  Check(r.GetNext = jrkArray);
+  Check(r.AsStr = '[["[StringConcat]{}"]]');
+  Check(r.GetNextNonWhiteChar = ',');
+  Check(readKey = 'fieldTypeList');
+  Check(r.GetNext = jrkArray);
+  Check(r.AsStr = '[["abc"]]');
+
+
+
+
+
+//  check(r.GetDataType = jrkObject);
+
+
+
+//  Check(readerinit('') = jrkObject);
+
+
+
+
+
+
+
+end;
+
+procedure TTestTJSONPCharReader.TestFile;
+var
+  r: TJSONReader;
+  s: string;
+  sField: string;
+  split: Char;
+
+  function readKey: string;
+  begin
+    Result := '';
+    if r.GetNext = jrkString then
+    begin
+      Result := r.AsStr;
+      if r.GetNextNonWhiteChar <> ':' then
+        Result := '';
+    end;
+  end;
+begin
+  ReadFileData('.\data\err.json', s);
+  r.Init(PChar(s), -1);
+  Check(r.GetDataType = jrkObject);
+//  Check(readKey = msg);
+  check(r.GetNextOf('ReturnDataList')= jrkObject);
+
+
+
+
+//  r.Init(Pchar(s), -1);
+//  check(r.GetDataType = jrkObject);
+//  sField := readKey;
+//  r.GetNext;
+//  split := r.GetNextNonWhiteChar;
+//
+//  sField := readKey;
+//  r.GetNext;
+//  split := r.GetNextNonWhiteChar;
+//
+//  sField := readKey;
+//  r.GetNext;
+//  split := r.GetNextNonWhiteChar;;
+
+
+
+
 
 
 end;

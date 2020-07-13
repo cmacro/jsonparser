@@ -44,9 +44,10 @@ type
     function GetNextNonWhiteChar: char;                   {$ifdef HASINLINE} inline; {$endif}
     function GetToken: string;                            {$ifdef HASINLINE} inline; {$endif}
     function GetToStrToken: string;                       {$ifdef HASINLINE} inline; {$endif}
-    function GetNextString: boolean;
-    function ReadJSONObject: boolean;
-    function ReadJSONArray: boolean;
+    function  GetNextString: boolean;
+    procedure SkipString;
+    function  ReadJSONObject: boolean;
+    function  ReadJSONArray: boolean;
     procedure AppendNextStringUnEscape; //(var str: string);
 
     function  GetDataType: TJSONReaderKind;
@@ -401,6 +402,21 @@ begin
   end;
 end;
 
+procedure TJSONReader.SkipString;
+var
+  c: char;
+begin
+  inc(Curr);
+  while Curr < Last do
+  begin
+    case Curr^ of
+      '\': inc(curr);
+      '"': break;
+    end;
+    inc(Curr);
+  end;
+end;
+
 function TJSONReader.ReadJSONArray: boolean;
 var
   level: Integer;
@@ -411,16 +427,17 @@ begin
   if Curr < Last then
     repeat
       case Curr^ of
+        '"': SkipString;
         '[': inc(level);
         ']': begin
-          if level = 0 then
-          begin
-            inc(Curr);
-            TokenLen := Curr - Token;
-            Result := True;
-            Break;
-          end;
-          dec(level);
+            if level = 0 then
+            begin
+              inc(Curr);
+              TokenLen := Curr - Token;
+              Result := True;
+              Break;
+            end;
+            dec(level);
         end;
       end;
       inc(Curr);
@@ -430,6 +447,7 @@ end;
 function TJSONReader.ReadJSONObject: boolean;
 var
   level: Integer;
+  c: pchar;
 begin
   Token := Curr - 1; // °üÀ¨À¨ºÅ
   level := 0;
@@ -437,16 +455,17 @@ begin
   if Curr <= Last then
     repeat
       case Curr^ of
+        '"': SkipString;
         '{': inc(level);
         '}': begin
-          if level = 0 then
-          begin
-            inc(Curr);
-            TokenLen := Curr - Token;
-            Result := True;
-            Break;
-          end;
-          dec(level);
+              if level = 0 then
+              begin
+                inc(Curr);
+                TokenLen := Curr - Token;
+                Result := True;
+                Break;
+              end;
+              dec(level);
         end;
       end;
       inc(Curr);
