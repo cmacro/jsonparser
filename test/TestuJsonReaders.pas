@@ -499,7 +499,32 @@ begin
   Check(parser.GetNextOf('abc') = jrkNumber);
   Check(parser.AsInt = 1);
 
+  SetParserStr('{"str": "str", "int": 123, "float": 12.3, "bool": true}');
+  Check(parser.GetDataType = jrkObject);
+  parser.EatchObjID(function (const AID: string; const AToken: TTokenData): boolean
+  begin
+    Result := True;
+    if aid = 'str' then
+    begin
+      Check(atoken.Kind = jrkString);
+      check(TokenToStr(atoken) = 'str');
+    end
+    else if aid = 'int' then
+    begin
+      Check(atoken.Kind = jrkNumber);
+      check(parser.AsInt = 123);
+    end;
+  end);
 
+  SetParserStr('{"str": "''str[]{}\"", "data": 123}');
+  Check(parser.GetDataType = jrkObject);
+  Check(parser.GetNext = jrkString);
+  check(parser.GetNextNonWhiteChar = ':');
+  Check(parser.GetNext = jrkString);
+  Check(parser.AsStr = '''str[]{}"');
+  check(parser.GetNextNonWhiteChar = ',');
+  Check(parser.GetNext = jrkString);
+  Check(parser.AsStr = 'data');
 end;
 
 procedure TTestTJSONPCharReader.TestEatchData;
@@ -714,26 +739,6 @@ begin
   Check(r.GetDataType = jrkObject);
 //  Check(readKey = msg);
   check(r.GetNextOf('ReturnDataList')= jrkObject);
-
-
-
-
-//  r.Init(Pchar(s), -1);
-//  check(r.GetDataType = jrkObject);
-//  sField := readKey;
-//  r.GetNext;
-//  split := r.GetNextNonWhiteChar;
-//
-//  sField := readKey;
-//  r.GetNext;
-//  split := r.GetNextNonWhiteChar;
-//
-//  sField := readKey;
-//  r.GetNext;
-//  split := r.GetNextNonWhiteChar;;
-
-
-
 
 
 

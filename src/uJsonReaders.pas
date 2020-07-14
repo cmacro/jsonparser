@@ -40,10 +40,11 @@ type
 
     procedure Init(const AJSON: PChar; ALen: Integer);
     procedure reset;                                      {$ifdef HASINLINE} inline; {$endif}
-    function GetNextChar: char;                           {$ifdef HASINLINE} inline; {$endif}
-    function GetNextNonWhiteChar: char;                   {$ifdef HASINLINE} inline; {$endif}
-    function GetToken: string;                            {$ifdef HASINLINE} inline; {$endif}
-    function GetToStrToken: string;                       {$ifdef HASINLINE} inline; {$endif}
+    function  GetNextChar: char;                           {$ifdef HASINLINE} inline; {$endif}
+    function  GetNextNonWhiteChar: char;                   {$ifdef HASINLINE} inline; {$endif}
+    function  GetToken: string;                            {$ifdef HASINLINE} inline; {$endif}
+    function  GetTokenData: TTokenData;                    {$ifdef HASINLINE} inline; {$endif}
+    function  GetToStrToken: string;                       {$ifdef HASINLINE} inline; {$endif}
     function  GetNextString: boolean;
     procedure SkipString;
     function  ReadJSONObject: boolean;
@@ -230,6 +231,14 @@ end;
 function TJSONReader.GetToken: string;
 begin
   SetString(Result, Token, TokenLen);
+end;
+
+function TJSONReader.GetTokenData: TTokenData;
+begin
+  Result.Kind := Kind;
+  Result.ExistsEscapeChar := ExistsEscapeChar;
+  Result.Data := Token;
+  Result.Len := TokenLen;
 end;
 
 function TJSONReader.GetToStrToken: string;
